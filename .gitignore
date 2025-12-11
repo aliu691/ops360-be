@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build artifacts
+dist
+# dist is the default output directory for the build process, specified in tsconfig.json
+
+# Testing
+/coverage
+# coverage is the default directory for test coverage reports
+
+# Environment files
+.env
+# .env files often contain sensitive information like API keys and credentials
+# Consider adding any other sensitive config files here
+
+# Nest-CLI
+.nestjs-cli.json
+
+# Editors and OS files
+.idea
+.vscode
+*.suo
+*.user
+*.casc
+*.lock
+.project
+.classpath
+.c9/
+.ionide/
+.vscode-test/
+.history/
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
