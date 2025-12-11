@@ -5,7 +5,7 @@ import ormconfig from './db/ormconfig';
 import { UploadsModule } from './modules/uploads/uploads.module';
 //import { MeetingsModule } from './modules/meetings/meetings.module';
 //import { FindingsModule } from './modules/findings/findings.module';
-//import { KpiEngineModule } from './modules/kpi-engine/kpi-engine.module';
+import { KpiEngineModule } from './modules/kpi-engine/kpi-engine.module';
 
 @Module({
   imports: [
@@ -13,7 +13,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
     UploadsModule,
     //MeetingsModule,
     //FindingsModule,
-    //KpiEngineModule,
+    KpiEngineModule,
   ],
 })
 export class AppModule {}
