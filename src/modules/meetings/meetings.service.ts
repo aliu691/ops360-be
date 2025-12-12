@@ -15,16 +15,46 @@ export class MeetingsService {
     await this.meetingRepo.save(entities);
   }
 
-  async getMeetingsByRep(repName: string) {
-    return this.meetingRepo.find({
+  async getMeetingsByRep(repName: string, page = 1, limit = 20) {
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 20;
+
+    const [items, total] = await this.meetingRepo.findAndCount({
       where: { repName },
       order: { createdAt: 'DESC' },
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
     });
+
+    return {
+      success: true,
+      message: 'Meetings retrieved successfully.',
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
+      items,
+    };
   }
 
-  async getAllMeetings() {
-    return this.meetingRepo.find({
+  async getAllMeetings(page = 1, limit = 20) {
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 20;
+
+    const [items, total] = await this.meetingRepo.findAndCount({
       order: { createdAt: 'DESC' },
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
     });
+
+    return {
+      success: true,
+      message: 'Meetings retrieved successfully.',
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
+      items,
+    };
   }
 }
