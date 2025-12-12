@@ -16,9 +16,18 @@ export class MeetingEvaluator {
     const hasContact =
       meeting.primaryContact && meeting.primaryContact.trim().length > 0;
 
+    // Build a base wrapper so all results include meeting details
+    const base = {
+      meetingId: meeting.id,
+      customerName: meeting.customerName,
+      primaryContact: meeting.primaryContact,
+      meetingPurpose: meeting.meetingPurpose,
+      meetingOutcome: meeting.meetingOutcome,
+    };
+
     if (!hasOutcome) {
       return {
-        meetingId: meeting.id,
+        ...base,
         status: 'FAIL',
         message: 'Missing meeting outcome.',
       };
@@ -26,7 +35,7 @@ export class MeetingEvaluator {
 
     if (!hasContact) {
       return {
-        meetingId: meeting.id,
+        ...base,
         status: 'FAIL',
         message: 'Missing primary contact.',
       };
@@ -34,7 +43,7 @@ export class MeetingEvaluator {
 
     if (this.isRoleOnly(meeting.primaryContact)) {
       return {
-        meetingId: meeting.id,
+        ...base,
         status: 'FAIR',
         message:
           'Primary contact appears to be a role/title rather than an individual name.',
@@ -42,7 +51,7 @@ export class MeetingEvaluator {
     }
 
     return {
-      meetingId: meeting.id,
+      ...base,
       status: 'GOOD',
       message: 'Meeting looks good.',
     };

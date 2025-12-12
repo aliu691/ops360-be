@@ -17,9 +17,13 @@ import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
 const ormconfig: TypeOrmModuleOptions = {
   type: 'sqlite',
-  database: 'ops360.sqlite',
+
+  // Store DB in a safe writable folder
+  database: 'data/ops360.sqlite',
+
   autoLoadEntities: true,
-  synchronize: true, // Auto create/update tables
+  synchronize: true, // Auto-create / update tables
+  logging: false,
 };
 
 export default ormconfig;

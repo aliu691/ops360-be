@@ -16,10 +16,15 @@ export class MeetingsService {
   }
 
   async getMeetingsByRep(repName: string) {
-    return this.meetingRepo.find({ where: { repName } });
+    return this.meetingRepo.find({
+      where: { repName },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async getAllMeetings() {
-    return this.meetingRepo.find();
+    return this.meetingRepo.find({
+      order: { createdAt: 'DESC' },
+    });
   }
 }
