@@ -1,14 +1,13 @@
 import {
   Controller,
   Post,
-  UploadedFile,
   UseInterceptors,
+  UploadedFile,
+  Query,
   BadRequestException,
-  Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
-import { Express } from 'express';
 
 @Controller('upload')
 export class UploadController {
@@ -17,25 +16,30 @@ export class UploadController {
   @Post('meetings')
   @UseInterceptors(FileInterceptor('file'))
   async uploadMeetings(
+    @Query('repName') repName: string,
     @UploadedFile() file: Express.Multer.File,
-    @Body('repName') repName: string,
   ) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
+    console.log('RECIEVED REP:', repName);
+    console.log('RECIEVED FILE:', file);
 
     if (!repName) {
-      throw new BadRequestException('repName is required');
+      throw new BadRequestException('repName is missing');
     }
 
+    if (!file) {
+      throw new BadRequestException('file is missing');
+    }
+
+    // MUST be inside an async function
     const result = await this.uploadService.processMeetingsFile(
       file.path,
       repName,
     );
 
     return {
+      success: true,
       message: 'File processed successfully',
-      ...result,
+      totalRows: result.totalRows,
     };
   }
 }

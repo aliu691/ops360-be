@@ -10,7 +10,9 @@ export class KpiEngineService {
   constructor(private readonly meetingsService: MeetingsService) {}
 
   async evaluateLatestWeekForRep(repName: string): Promise<WeeklyResult> {
-    const allMeetings = await this.meetingsService.getMeetingsByRep(repName);
+    // ✅ Extract array from paginated result
+    const { items: allMeetings } =
+      await this.meetingsService.getMeetingsByRep(repName);
 
     if (!allMeetings || allMeetings.length === 0) {
       return {
