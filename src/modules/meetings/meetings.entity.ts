@@ -25,6 +25,12 @@ export class Meeting {
   @Column({ nullable: true })
   meetingOutcome: string;
 
+  @Column({ type: 'text' })
+  reportingMonth: string;
+
+  @Column({ type: 'integer' })
+  reportingWeek: number;
+
   @CreateDateColumn()
   createdAt: Date; // Date the weekly report was uploaded
 }
