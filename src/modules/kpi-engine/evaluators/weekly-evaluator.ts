@@ -1,11 +1,38 @@
 import { MeetingRow, WeeklyFinding, WeeklyStatus } from '../types/kpi-types';
 
+/* ---------------------------------------------
+   CONFIG — single source of truth
+---------------------------------------------- */
+const KPI_CONFIG = {
+  MIN_MEETINGS: 5,
+  IDEAL_MEETINGS: 8,
+
+  PENALTY_PER_MISSED_MEETING: 10,
+
+  ACTIVITY_WEIGHT: 0.6,
+  QUALITY_WEIGHT: 0.4,
+
+  STATUS_THRESHOLDS: {
+    GOOD: 70,
+    FAIR: 45,
+  },
+
+  QUALITY_PENALTIES: {
+    MISSING_OUTCOME: 10,
+    MISSING_CONTACT: 10,
+    ROLE_ONLY_CONTACT: 5,
+  },
+};
+
 export class WeeklyEvaluator {
   static computeScoreAndStatus(meetings: MeetingRow[]) {
     const total = meetings.length;
 
-    // 1. COMPUTE QUALITY SCORE
+    /* ---------------------------------------------
+       1. QUALITY SCORE
+    ---------------------------------------------- */
     let qualityScore = 100;
+
     let missingOutcomeCount = 0;
     let missingContactCount = 0;
     let roleOnlyCount = 0;
@@ -14,50 +41,64 @@ export class WeeklyEvaluator {
       /(director|manager|officer|staff|engineer|consultant|lead|coordinator|head|administrator|ceo|cto|cfo|vp|vice|principal)/i;
 
     for (const m of meetings) {
-      const outcome = (m.meetingOutcome ?? '').trim().length > 0;
-      const contact = (m.primaryContact ?? '').trim().length > 0;
+      const outcomePresent = (m.meetingOutcome ?? '').trim().length > 0;
+      const contactPresent = (m.primaryContact ?? '').trim().length > 0;
 
-      if (!outcome) missingOutcomeCount++;
-      if (!contact) missingContactCount++;
+      if (!outcomePresent) missingOutcomeCount++;
+      if (!contactPresent) missingContactCount++;
       else if (roleRegex.test(m.primaryContact!)) roleOnlyCount++;
     }
 
-    // Quality deductions
-    qualityScore -= missingOutcomeCount * 10;
-    qualityScore -= missingContactCount * 10;
-    qualityScore -= roleOnlyCount * 5;
+    qualityScore -=
+      missingOutcomeCount * KPI_CONFIG.QUALITY_PENALTIES.MISSING_OUTCOME;
+    qualityScore -=
+      missingContactCount * KPI_CONFIG.QUALITY_PENALTIES.MISSING_CONTACT;
+    qualityScore -=
+      roleOnlyCount * KPI_CONFIG.QUALITY_PENALTIES.ROLE_ONLY_CONTACT;
 
     qualityScore = Math.max(0, Math.min(100, qualityScore));
 
-    // 2. COMPUTE ACTIVITY SCORE
-    const idealMeetings = 8;
-
+    /* ---------------------------------------------
+       2. ACTIVITY SCORE (progress to ideal)
+    ---------------------------------------------- */
     let activityScore = 0;
-    if (total >= idealMeetings) {
+
+    if (total >= KPI_CONFIG.IDEAL_MEETINGS) {
       activityScore = 100;
     } else {
-      activityScore = Math.round((total / idealMeetings) * 100);
+      activityScore = Math.round((total / KPI_CONFIG.IDEAL_MEETINGS) * 100);
     }
 
     activityScore = Math.max(0, Math.min(100, activityScore));
 
-    // 3. COMBINE INTO FINAL SCORE
-    const activityWeight = 0.6;
-    const qualityWeight = 0.4;
-
+    /* ---------------------------------------------
+       3. COMBINE SCORES
+    ---------------------------------------------- */
     let finalScore = Math.round(
-      activityScore * activityWeight + qualityScore * qualityWeight,
+      activityScore * KPI_CONFIG.ACTIVITY_WEIGHT +
+        qualityScore * KPI_CONFIG.QUALITY_WEIGHT,
     );
 
+    /* ---------------------------------------------
+       4. ACTIVITY DEFICIT PENALTY
+    ---------------------------------------------- */
+    const missedMeetings = Math.max(0, KPI_CONFIG.MIN_MEETINGS - total);
+
+    const activityPenalty =
+      missedMeetings * KPI_CONFIG.PENALTY_PER_MISSED_MEETING;
+
+    finalScore -= activityPenalty;
     finalScore = Math.max(0, Math.min(100, finalScore));
 
-    // 4. WEEKLY FINDINGS (MESSAGING)
+    /* ---------------------------------------------
+       5. WEEKLY FINDINGS
+    ---------------------------------------------- */
     const weeklyFindings: WeeklyFinding[] = [];
 
-    if (total < 5) {
+    if (missedMeetings > 0) {
       weeklyFindings.push({
-        status: total < 3 ? 'FAIL' : 'FAIR',
-        message: `Weekly activity below required minimum (5). Logged ${total}.`,
+        status: missedMeetings >= 3 ? 'FAIL' : 'FAIR',
+        message: `Weekly activity below minimum (${KPI_CONFIG.MIN_MEETINGS}). Logged ${total} meeting(s).`,
       });
     }
 
@@ -76,21 +117,23 @@ export class WeeklyEvaluator {
         message: `${missingContactCount} meeting(s) missing primaryContact.`,
       });
     }
-    // 5. DETERMINE FINAL STATUS
+
+    /* ---------------------------------------------
+       6. FINAL STATUS (matches UI)
+    ---------------------------------------------- */
     let status: WeeklyStatus;
 
-    // Hard fail if activity extremely low
-    if (total < 3) {
-      status = 'FAIL';
+    if (finalScore >= KPI_CONFIG.STATUS_THRESHOLDS.GOOD) {
+      status = 'GOOD';
+    } else if (finalScore >= KPI_CONFIG.STATUS_THRESHOLDS.FAIR) {
+      status = 'FAIR';
     } else {
-      // Otherwise score determines status
-      if (finalScore >= 65) status = 'GOOD';
-      else if (finalScore >= 45) status = 'FAIR';
-      else status = 'FAIL';
+      status = 'FAIL';
     }
 
-    // 6. RETURN RESULT
-
+    /* ---------------------------------------------
+       7. RETURN RESULT
+    ---------------------------------------------- */
     return {
       totalMeetings: total,
       score: finalScore,
@@ -100,6 +143,8 @@ export class WeeklyEvaluator {
         missingOutcomeCount,
         missingContactCount,
         roleOnlyCount,
+        missedMeetings,
+        activityPenalty,
       },
     };
   }

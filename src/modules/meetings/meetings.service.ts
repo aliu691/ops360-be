@@ -103,18 +103,42 @@ export class MeetingsService {
     return qb.getMany();
   }
 
-  /**
-   * Admin / overview endpoint
-   */
-  async getAllMeetings(page = 1, limit = 20) {
+  async getAllMeetings(
+    page = 1,
+    limit = 20,
+    filters?: {
+      month?: string;
+      week?: number;
+    },
+  ) {
     const pageNum = Number(page) || 1;
     const limitNum = Number(limit) || 20;
 
-    const [items, total] = await this.meetingRepo.findAndCount({
-      order: { createdAt: 'DESC' },
-      skip: (pageNum - 1) * limitNum,
-      take: limitNum,
-    });
+    const qb = this.meetingRepo.createQueryBuilder('m');
+
+    /* ------------------------------
+       REPORTING MONTH FILTER
+    ------------------------------ */
+    if (filters?.month) {
+      qb.andWhere('m.reportingMonth = :month', {
+        month: filters.month,
+      });
+    }
+
+    /* ------------------------------
+       REPORTING WEEK FILTER
+    ------------------------------ */
+    if (filters?.week !== undefined) {
+      qb.andWhere('m.reportingWeek = :week', {
+        week: filters.week,
+      });
+    }
+
+    qb.orderBy('m.createdAt', 'DESC')
+      .skip((pageNum - 1) * limitNum)
+      .take(limitNum);
+
+    const [items, total] = await qb.getManyAndCount();
 
     return {
       success: true,
