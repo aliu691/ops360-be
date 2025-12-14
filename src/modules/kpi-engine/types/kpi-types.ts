@@ -29,3 +29,9 @@ export interface WeeklyResult {
   weeklyFindings: WeeklyFinding[];
   meetingFindings: MeetingFinding[];
 }
+
+export interface KpiFilters {
+  month?: string; // YYYY-MM
+  week?: string; // YYYY-WW
+  quarter?: string; // YYYY-QN
+}
