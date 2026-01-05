@@ -8,6 +8,7 @@ import { MeetingsModule } from './modules/meetings/meetings.module';
 import { KpiEngineModule } from './modules/kpi-engine/kpi-engine.module';
 import { FiltersModule } from './modules/filters/filters.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -18,6 +19,8 @@ import { CalendarModule } from './modules/calendar/calendar.module';
     KpiEngineModule,
     FiltersModule,
     CalendarModule,
+    UsersModule,
+    TypeOrmModule.forRoot(ormconfig),
   ],
 })
 export class AppModule {}

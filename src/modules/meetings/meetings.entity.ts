@@ -3,7 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { User } from '../users/users.entity';
 
 @Entity()
 export class Meeting {
@@ -33,4 +36,11 @@ export class Meeting {
 
   @CreateDateColumn()
   createdAt: Date; // Date the weekly report was uploaded
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'userId' })
+  user?: User;
+
+  @Column({ nullable: true })
+  userId?: number;
 }
