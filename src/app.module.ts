@@ -23,11 +23,11 @@ import { UsersModule } from './modules/users/users.module';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: process.env.DATABASE_URL,
-      autoLoadEntities: true, // ✅ NestJS runtime only
-      synchronize: false, // ❌ NEVER true in staging/prod
+      autoLoadEntities: true,
+      synchronize: false,
       logging: false,
       ssl: {
-        rejectUnauthorized: false, // ✅ required for Supabase / Render
+        rejectUnauthorized: false,
       },
     }),
   ],
