@@ -86,8 +86,8 @@ export class KpiEngineService {
     return {
       totalMeetings: 0,
       score: 0,
-      status: 'FAIL',
-      weeklyFindings: [{ status: 'FAIL', message }],
+      status: 'POOR',
+      weeklyFindings: [{ status: 'POOR', message }],
       meetingFindings: [],
     };
   }

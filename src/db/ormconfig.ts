@@ -22,7 +22,7 @@ const ormconfig: TypeOrmModuleOptions = {
   database: 'data/ops360.sqlite',
 
   autoLoadEntities: true,
-  synchronize: true, // Auto-create / update tables
+  synchronize: false, // Auto-create / update tables
   logging: false,
 };
 

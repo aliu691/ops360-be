@@ -1,5 +1,5 @@
-export type MeetingStatus = 'GOOD' | 'FAIR' | 'FAIL';
-export type WeeklyStatus = 'GOOD' | 'FAIR' | 'FAIL';
+export type MeetingStatus = 'GOOD' | 'FAIR' | 'POOR';
+export type WeeklyStatus = 'GOOD' | 'FAIR' | 'POOR';
 
 export interface MeetingRow {
   id: number;

@@ -1,11 +1,11 @@
+import { roleRegex } from 'src/utils/constants';
 import { MeetingFinding, MeetingRow, MeetingStatus } from '../types/kpi-types';
 
 export class MeetingEvaluator {
   // detect if primaryContact is a role/title instead of a name
   private static isRoleOnly(contact?: string | null): boolean {
     if (!contact) return false;
-    const roleRegex =
-      /(director|manager|officer|staff|engineer|consultant|lead|coordinator|head|administrator|ceo|cto|cfo|vp|vice|principal)/i;
+
     return roleRegex.test(contact);
   }
 
@@ -28,7 +28,7 @@ export class MeetingEvaluator {
     if (!hasOutcome) {
       return {
         ...base,
-        status: 'FAIL',
+        status: 'POOR',
         message: 'Missing meeting outcome.',
       };
     }
@@ -36,7 +36,7 @@ export class MeetingEvaluator {
     if (!hasContact) {
       return {
         ...base,
-        status: 'FAIL',
+        status: 'POOR',
         message: 'Missing primary contact.',
       };
     }
