@@ -59,14 +59,8 @@ import { UsersModule } from './modules/users/users.module';
       url: process.env.DATABASE_URL,
       autoLoadEntities: true,
       synchronize: false,
-      logging: true, // Enable this temporarily to see connection details
-      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-      extra: {
-        // Additional Supabase-specific settings
-        ssl: {
-          rejectUnauthorized: false,
-        },
-      },
+      logging: false,
+      ssl: true,
     }),
   ],
 })
