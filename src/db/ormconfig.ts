@@ -1,29 +1,26 @@
-// import { TypeOrmModuleOptions } from '@nestjs/typeorm';
-
-// const ormconfig: TypeOrmModuleOptions = {
-//   type: 'postgres',
-//   host: process.env.DATABASE_HOST || 'localhost',
-//   port: Number(process.env.DATABASE_PORT) || 5432,
-//   username: process.env.DATABASE_USER || 'postgres',
-//   password: process.env.DATABASE_PASSWORD || 'password',
-//   database: process.env.DATABASE_NAME || 'ops360',
-//   autoLoadEntities: true,
-//   synchronize: true, // ⚠️ OK for development, turn off in production
-// };
-
-// export default ormconfig;
-
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
-const ormconfig: TypeOrmModuleOptions = {
-  type: 'sqlite',
+const isPostgres = !!process.env.DATABASE_URL;
 
-  // Store DB in a safe writable folder
-  database: 'data/ops360.sqlite',
-
-  autoLoadEntities: true,
-  synchronize: false, // Auto-create / update tables
-  logging: false,
-};
+const ormconfig: TypeOrmModuleOptions = isPostgres
+  ? {
+      // ✅ STAGING / PROD (Supabase / Render)
+      type: 'postgres',
+      url: process.env.DATABASE_URL,
+      autoLoadEntities: true,
+      synchronize: false, // NEVER true outside local
+      logging: false,
+      ssl: {
+        rejectUnauthorized: false, // required for Supabase
+      },
+    }
+  : {
+      // ⚠️ Legacy fallback (optional — can be deleted later)
+      type: 'sqlite',
+      database: 'data/ops360.sqlite',
+      autoLoadEntities: true,
+      synchronize: false,
+      logging: false,
+    };
 
 export default ormconfig;

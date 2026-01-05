@@ -1,16 +1,18 @@
-// src/data-source.ts
-import 'reflect-metadata';
+import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import { User } from './modules/users/users.entity';
 import { Meeting } from './modules/meetings/meetings.entity';
 
-export const AppDataSource = new DataSource({
-  type: 'sqlite',
-  database: 'data/ops360.sqlite',
-
+const AppDataSource = new DataSource({
+  type: 'postgres',
+  url: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // required for Supabase
+  },
   entities: [User, Meeting],
-
   migrations: ['dist/migrations/*.js'],
-
+  synchronize: false,
   logging: false,
 });
+
+export default AppDataSource;
