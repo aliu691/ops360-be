@@ -12,15 +12,24 @@ import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot(ormconfig),
     UploadsModule,
     MeetingsModule,
-    //FindingsModule,
+    // FindingsModule,
     KpiEngineModule,
     FiltersModule,
     CalendarModule,
     UsersModule,
-    TypeOrmModule.forRoot(ormconfig),
+
+    TypeOrmModule.forRoot({
+      type: 'postgres',
+      url: process.env.DATABASE_URL,
+      autoLoadEntities: true, // ✅ NestJS runtime only
+      synchronize: false, // ❌ NEVER true in staging/prod
+      logging: false,
+      ssl: {
+        rejectUnauthorized: false, // ✅ required for Supabase / Render
+      },
+    }),
   ],
 })
 export class AppModule {}

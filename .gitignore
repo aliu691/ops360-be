@@ -13,6 +13,8 @@ dist
 
 # Environment files
 .env
+.env.staging
+.env.production
 # .env files often contain sensitive information like API keys and credentials
 # Consider adding any other sensitive config files here
 
@@ -38,3 +40,4 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 Thumbs.db
+/uploads

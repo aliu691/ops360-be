@@ -1,12 +1,19 @@
 // src/reconcile-meetings-users.ts
+
+/**
+ * ONE-OFF MIGRATION SCRIPT
+ * DO NOT RUN AGAIN
+ * Executed on 2026-01-05 (staging)
+ */
+
 console.log('🚀 Reconciliation script started');
 
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
+import { AppModule } from '../app.module';
 import { DataSource } from 'typeorm';
-import { Meeting } from './modules/meetings/meetings.entity';
-import { User } from './modules/users/users.entity';
+import { Meeting } from '../modules/meetings/meetings.entity';
+import { User } from '../modules/users/users.entity';
 
 async function reconcileMeetingsWithUsers() {
   console.log('🧠 Bootstrapping Nest context...');
