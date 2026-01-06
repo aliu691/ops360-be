@@ -1,66 +1,93 @@
-import {
-  Controller,
-  Post,
-  UseInterceptors,
-  UploadedFile,
-  Query,
-  BadRequestException,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { UploadService } from './upload.service';
+import { Injectable, BadRequestException } from '@nestjs/common';
+import * as XLSX from 'xlsx';
+import { MeetingsService } from '../meetings/meetings.service';
 
-@Controller('upload')
-export class UploadController {
-  constructor(private readonly uploadService: UploadService) {}
+@Injectable()
+export class UploadService {
+  constructor(private readonly meetingsService: MeetingsService) {}
 
-  @Post('meetings')
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadMeetings(
-    @UploadedFile() file: Express.Multer.File,
-    @Query('repName') repName: string,
-    @Query('month') month: string, // YYYY-MM
-    @Query('week') week?: string, // number as string from query
+  async processMeetingsFile(
+    filePath: string,
+    context: {
+      repName: string;
+      reportingMonth: string; // YYYY-MM
+      reportingWeek: number;
+    },
   ) {
-    console.log('RECEIVED REP:', repName);
-    console.log('RECEIVED MONTH:', month);
-    console.log('RECEIVED WEEK:', week);
-    console.log('RECEIVED FILE:', file?.originalname);
+    const { repName, reportingMonth, reportingWeek } = context;
 
-    if (!repName) {
-      throw new BadRequestException('repName is missing');
+    if (!repName || !reportingMonth || reportingWeek === undefined) {
+      throw new BadRequestException(
+        'repName, reportingMonth and reportingWeek are required',
+      );
     }
 
-    if (!month) {
-      throw new BadRequestException('reporting month is required (YYYY-MM)');
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+    console.log('DEBUG ROWS (first 5):', rows.slice(0, 5));
+
+    if (rows.length < 2) {
+      return { totalRows: 0 };
     }
 
-    if (!week) {
-      throw new BadRequestException('reporting week is required');
+    // Header row
+    const headerRow = rows[0] as Record<string, any>;
+    const columnMap: Record<string, string> = {};
+
+    for (const key of Object.keys(headerRow)) {
+      const value = headerRow[key]?.toString().trim().toUpperCase();
+
+      if (value === 'CLIENT NAME') columnMap.customerName = key;
+      if (value === 'PRIMARY CONTACT') columnMap.primaryContact = key;
+      if (value === 'PURPOSE OF MEETING') columnMap.meetingPurpose = key;
+      if (value === 'OUTCOME') columnMap.meetingOutcome = key;
     }
 
-    const weekNumber = Number(week);
-    if (Number.isNaN(weekNumber)) {
-      throw new BadRequestException('week must be a valid number');
+    console.log('COLUMN MAP:', columnMap);
+
+    // Validate required columns
+    if (
+      !columnMap.customerName ||
+      !columnMap.primaryContact ||
+      !columnMap.meetingPurpose ||
+      !columnMap.meetingOutcome
+    ) {
+      throw new BadRequestException(
+        'Invalid file format. Required columns: CLIENT NAME, PRIMARY CONTACT, PURPOSE OF MEETING, OUTCOME',
+      );
     }
 
-    if (!file) {
-      throw new BadRequestException('file is missing');
-    }
-
-    const result = await this.uploadService.processMeetingsFile(file.path, {
+    const meetings = rows.slice(1).map((row: any) => ({
       repName,
-      reportingMonth: month,
-      reportingWeek: weekNumber,
-    });
+      reportingMonth,
+      reportingWeek,
+      customerName: row[columnMap.customerName] || '',
+      primaryContact: row[columnMap.primaryContact] || '',
+      meetingPurpose: row[columnMap.meetingPurpose] || '',
+      meetingOutcome: row[columnMap.meetingOutcome] || '',
+    }));
+
+    const filteredMeetings = meetings.filter(
+      (m) => m.customerName && m.customerName.trim() !== '',
+    );
+
+    if (filteredMeetings.length === 0) {
+      return { totalRows: 0 };
+    }
+
+    // 🚨 THIS CALL IS WHERE TIMEOUT HAPPENS IF IMPLEMENTED WRONG
+    await this.meetingsService.saveMeetings(filteredMeetings);
 
     return {
-      success: true,
-      message: 'File processed successfully',
-      totalRows: result.totalRows,
+      totalRows: filteredMeetings.length,
       reporting: {
         repName,
-        month,
-        week: weekNumber,
+        month: reportingMonth,
+        week: reportingWeek,
       },
     };
   }

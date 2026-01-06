@@ -60,7 +60,18 @@ import { UsersModule } from './modules/users/users.module';
       autoLoadEntities: true,
       synchronize: false,
       logging: false,
-      ssl: true,
+
+      ssl: {
+        rejectUnauthorized: false,
+      },
+
+      extra: {
+        // VERY IMPORTANT for Supabase + Render
+        max: 5, // limit concurrent connections
+        connectionTimeoutMillis: 10_000,
+        idleTimeoutMillis: 10_000,
+        keepAlive: true,
+      },
     }),
   ],
 })
