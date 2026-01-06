@@ -11,7 +11,7 @@ export class UploadService {
     context: {
       repName: string;
       reportingMonth: string; // YYYY-MM
-      reportingWeek: number; // e.g. 49
+      reportingWeek: number;
     },
   ) {
     const { repName, reportingMonth, reportingWeek } = context;
@@ -30,11 +30,11 @@ export class UploadService {
 
     console.log('DEBUG ROWS (first 5):', rows.slice(0, 5));
 
-    if (rows.length === 0) {
+    if (rows.length < 2) {
       return { totalRows: 0 };
     }
 
-    // Row 1 contains header titles
+    // Header row
     const headerRow = rows[0] as Record<string, any>;
     const columnMap: Record<string, string> = {};
 
@@ -49,6 +49,18 @@ export class UploadService {
 
     console.log('COLUMN MAP:', columnMap);
 
+    // Validate required columns
+    if (
+      !columnMap.customerName ||
+      !columnMap.primaryContact ||
+      !columnMap.meetingPurpose ||
+      !columnMap.meetingOutcome
+    ) {
+      throw new BadRequestException(
+        'Invalid file format. Required columns: CLIENT NAME, PRIMARY CONTACT, PURPOSE OF MEETING, OUTCOME',
+      );
+    }
+
     const meetings = rows.slice(1).map((row: any) => ({
       repName,
       reportingMonth,
@@ -59,11 +71,15 @@ export class UploadService {
       meetingOutcome: row[columnMap.meetingOutcome] || '',
     }));
 
-    // Remove empty rows
     const filteredMeetings = meetings.filter(
       (m) => m.customerName && m.customerName.trim() !== '',
     );
 
+    if (filteredMeetings.length === 0) {
+      return { totalRows: 0 };
+    }
+
+    // 🚨 THIS CALL IS WHERE TIMEOUT HAPPENS IF IMPLEMENTED WRONG
     await this.meetingsService.saveMeetings(filteredMeetings);
 
     return {
