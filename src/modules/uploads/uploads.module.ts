@@ -3,6 +3,7 @@ import { UploadController } from './upload.controller';
 import { UploadService } from './upload.service';
 import { MeetingsModule } from '../meetings/meetings.module';
 import { MulterModule } from '@nestjs/platform-express';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { MulterModule } from '@nestjs/platform-express';
       dest: './uploads', // local folder storage
     }),
     MeetingsModule, // so upload service can save meetings
+    UsersModule,
   ],
   controllers: [UploadController],
   providers: [UploadService],

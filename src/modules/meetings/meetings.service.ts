@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Meeting } from './meetings.entity';
+import { ConflictException } from '@nestjs/common';
 
 @Injectable()
 export class MeetingsService {
@@ -11,15 +12,48 @@ export class MeetingsService {
   ) {}
 
   async saveMeetings(meetings: Partial<Meeting>[]) {
+    if (!meetings.length) return;
+
+    /* ------------------------------------------------
+       0️⃣ Hard validation (must have user context)
+    ------------------------------------------------ */
+    const invalid = meetings.find(
+      (m) => !m.userId || !m.reportingMonth || m.reportingWeek === undefined,
+    );
+
+    if (invalid) {
+      throw new Error(
+        'userId, reportingMonth and reportingWeek are required for all meetings',
+      );
+    }
+
+    const { userId, reportingMonth, reportingWeek } = meetings[0];
+
+    /* ------------------------------------------------
+       1️⃣ Prevent duplicate uploads PER USER
+    ------------------------------------------------ */
+    const existing = await this.meetingRepo.findOne({
+      where: {
+        userId,
+        reportingMonth,
+        reportingWeek,
+      },
+      select: ['id'],
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `User already uploaded meetings for week ${reportingWeek} (${reportingMonth}).`,
+      );
+    }
+
+    /* ------------------------------------------------
+       2️⃣ Persist meetings
+    ------------------------------------------------ */
     const entities = this.meetingRepo.create(meetings);
     await this.meetingRepo.save(entities);
   }
 
-  /**
-   * Get meetings for a rep
-   * ✅ Pagination
-   * ✅ Optional reportingMonth + reportingWeek filters
-   */
   async getMeetingsByRep(
     repName: string,
     page = 1,

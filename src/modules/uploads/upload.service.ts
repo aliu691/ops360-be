@@ -12,6 +12,7 @@ export class UploadService {
       repName: string;
       reportingMonth: string; // YYYY-MM
       reportingWeek: number;
+      userId: number;
     },
   ) {
     const { repName, reportingMonth, reportingWeek } = context;
@@ -62,6 +63,7 @@ export class UploadService {
     }
 
     const meetings = rows.slice(1).map((row: any) => ({
+      userId: context.userId,
       repName,
       reportingMonth,
       reportingWeek,

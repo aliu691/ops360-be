@@ -7,11 +7,15 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { UsersService } from '../users/users.service';
 import { UploadService } from './upload.service';
 
 @Controller('upload')
 export class UploadController {
-  constructor(private readonly uploadService: UploadService) {}
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Post('meetings')
   @UseInterceptors(FileInterceptor('file'))
@@ -47,10 +51,17 @@ export class UploadController {
       throw new BadRequestException('file is missing');
     }
 
+    const user = await this.usersService.findByName(repName);
+
+    if (!user) {
+      throw new BadRequestException(`User '${repName}' not found`);
+    }
+
     const result = await this.uploadService.processMeetingsFile(file.path, {
       repName,
       reportingMonth: month,
       reportingWeek: weekNumber,
+      userId: user.id,
     });
 
     return {
