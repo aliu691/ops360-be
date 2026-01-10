@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -105,5 +106,30 @@ export class AdminsService {
     if (existing) {
       throw new ForbiddenException('SUPER_ADMIN already exists');
     }
+  }
+  /* --------------------------------
+       FIND BY EMAIL
+    -------------------------------- */
+
+  async findByEmail(email: string) {
+    return this.adminRepo.findOne({
+      where: { email },
+    });
+  }
+
+  /* --------------------------------
+       FIND BY ID
+    -------------------------------- */
+
+  async findById(id: number): Promise<Admin> {
+    const admin = await this.adminRepo.findOne({
+      where: { id },
+    });
+
+    if (!admin) {
+      throw new NotFoundException('Admin not found');
+    }
+
+    return admin;
   }
 }
