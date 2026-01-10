@@ -8,6 +8,7 @@ import { KpiEngineModule } from './modules/kpi-engine/kpi-engine.module';
 import { FiltersModule } from './modules/filters/filters.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { UsersModule } from './modules/users/users.module';
+import { AdminsModule } from './modules/admins/admins.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { UsersModule } from './modules/users/users.module';
     FiltersModule,
     CalendarModule,
     UsersModule,
+    AdminsModule,
   ],
 })
 export class AppModule {}
