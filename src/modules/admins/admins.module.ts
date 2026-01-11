@@ -9,10 +9,12 @@ import { AdminInvite } from './admins_invites.entity';
 import { AdminsService } from './admins.service';
 import { AdminsController } from './admins.controller';
 import { JwtStrategy } from '../auth/jwt.strategy';
+import { EmailModule } from '../email/email.modules';
+import { AdminPasswordReset } from './admins_password_resets.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Admin, AdminInvite]),
+    TypeOrmModule.forFeature([Admin, AdminInvite, AdminPasswordReset]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     ConfigModule,
 
@@ -24,6 +26,7 @@ import { JwtStrategy } from '../auth/jwt.strategy';
         signOptions: { expiresIn: '8h' },
       }),
     }),
+    EmailModule,
   ],
   controllers: [AdminsController],
   providers: [AdminsService, JwtStrategy],

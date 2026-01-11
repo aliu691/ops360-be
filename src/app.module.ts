@@ -13,6 +13,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AdminAuthGuard } from './utils/admin-auth.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { RolesGuard } from './utils/guards.roles';
+import { EmailModule } from './modules/email/email.modules';
 
 @Module({
   providers: [
@@ -61,6 +62,7 @@ import { RolesGuard } from './utils/guards.roles';
     UsersModule,
     AdminsModule,
     AuthModule,
+    EmailModule,
   ],
 })
 export class AppModule {}
