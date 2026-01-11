@@ -34,6 +34,7 @@ export class AdminsService {
   /* --------------------------------
        INVITE ADMIN (SUPER_ADMIN only)
     -------------------------------- */
+
   async inviteAdmin(email: string, inviter: Admin) {
     const existingAdmin = await this.adminRepo.findOne({
       where: { email },
@@ -53,12 +54,14 @@ export class AdminsService {
 
     await this.inviteRepo.save(invite);
 
+    const inviteLink = `${process.env.FRONTEND_URL}/set-password?token=${token}&type=invite`;
+
     await this.emailService.sendEmail({
       to: email,
       subject: 'You’ve been invited to Ops360',
       html: adminInviteTemplate({
         inviterEmail: inviter.email,
-        inviteLink: `${process.env.FRONTEND_URL}/set-password?token=${token}&type=invite`,
+        inviteLink,
       }),
     });
 
@@ -183,11 +186,13 @@ export class AdminsService {
 
     await this.resetRepo.save(reset);
 
+    const resetLink = `${process.env.FRONTEND_URL}/set-password?token=${token}&type=reset`;
+
     await this.emailService.sendEmail({
       to: email,
       subject: 'Reset your Ops360 password',
       html: passwordResetTemplate({
-        resetLink: `${process.env.FRONTEND_URL}/set-password?token=${token}&type=reset`,
+        resetLink,
       }),
     });
 
