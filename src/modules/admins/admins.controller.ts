@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req } from '@nestjs/common';
+import { Controller, Post, Body, Req, Get, Param } from '@nestjs/common';
 import { Public } from 'src/utils/decorator.public';
 import { Roles } from 'src/utils/decorator.roles';
 import { AdminRole } from './admins.entity';
@@ -21,5 +21,17 @@ export class AdminsController {
     @Body('password') password: string,
   ) {
     return this.adminsService.acceptInvite(token, password);
+  }
+
+  @Get()
+  @Roles(AdminRole.SUPER_ADMIN)
+  findAll() {
+    return this.adminsService.findAll();
+  }
+
+  @Get(':email')
+  @Roles(AdminRole.SUPER_ADMIN)
+  findOne(@Param('email') email: string) {
+    return this.adminsService.findByEmail(String(email));
   }
 }

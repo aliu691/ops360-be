@@ -231,4 +231,13 @@ export class AdminsService {
       message: 'Password reset successful. You can now log in.',
     };
   }
+
+  async findAll() {
+    const items = await this.adminRepo.find({});
+
+    return {
+      success: true,
+      items,
+    };
+  }
 }
