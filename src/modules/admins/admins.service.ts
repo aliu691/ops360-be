@@ -58,7 +58,7 @@ export class AdminsService {
       subject: 'You’ve been invited to Ops360',
       html: adminInviteTemplate({
         inviterEmail: inviter.email,
-        inviteLink: `${process.env.FRONTEND_URL}/accept-invite?token=${token}`,
+        inviteLink: `${process.env.FRONTEND_URL}/accept-invite?token=${token}&type=invite`,
       }),
     });
 
@@ -187,7 +187,7 @@ export class AdminsService {
       to: email,
       subject: 'Reset your Ops360 password',
       html: passwordResetTemplate({
-        resetLink: `${process.env.FRONTEND_URL}/reset-password?token=${token}`,
+        resetLink: `${process.env.FRONTEND_URL}/reset-password?token=${token}&type=reset`,
       }),
     });
 
