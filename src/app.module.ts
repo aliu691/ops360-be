@@ -8,8 +8,24 @@ import { KpiEngineModule } from './modules/kpi-engine/kpi-engine.module';
 import { FiltersModule } from './modules/filters/filters.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { UsersModule } from './modules/users/users.module';
+import { AdminsModule } from './modules/admins/admins.module';
+import { APP_GUARD } from '@nestjs/core';
+import { AdminAuthGuard } from './utils/admin-auth.guard';
+import { AuthModule } from './modules/auth/auth.module';
+import { RolesGuard } from './utils/guards.roles';
+import { EmailModule } from './modules/email/email.modules';
 
 @Module({
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: AdminAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
@@ -44,6 +60,9 @@ import { UsersModule } from './modules/users/users.module';
     FiltersModule,
     CalendarModule,
     UsersModule,
+    AdminsModule,
+    AuthModule,
+    EmailModule,
   ],
 })
 export class AppModule {}

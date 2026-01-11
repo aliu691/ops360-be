@@ -1,0 +1,25 @@
+import { Controller, Post, Body, Req } from '@nestjs/common';
+import { Public } from 'src/utils/decorator.public';
+import { Roles } from 'src/utils/decorator.roles';
+import { AdminRole } from './admins.entity';
+import { AdminsService } from './admins.service';
+
+@Controller('admins')
+export class AdminsController {
+  constructor(private readonly adminsService: AdminsService) {}
+
+  @Post('invite')
+  @Roles(AdminRole.SUPER_ADMIN)
+  async inviteAdmin(@Body('email') email: string, @Req() req) {
+    return this.adminsService.inviteAdmin(email, req.user);
+  }
+
+  @Public()
+  @Post('accept-invite')
+  acceptInvite(
+    @Body('token') token: string,
+    @Body('password') password: string,
+  ) {
+    return this.adminsService.acceptInvite(token, password);
+  }
+}
