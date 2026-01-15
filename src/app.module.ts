@@ -14,6 +14,7 @@ import { AdminAuthGuard } from './utils/admin-auth.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { RolesGuard } from './utils/guards.roles';
 import { EmailModule } from './modules/email/email.modules';
+import { DepartmentsModule } from './modules/departments/departments.module';
 
 @Module({
   providers: [
@@ -63,6 +64,7 @@ import { EmailModule } from './modules/email/email.modules';
     AdminsModule,
     AuthModule,
     EmailModule,
+    DepartmentsModule,
   ],
 })
 export class AppModule {}

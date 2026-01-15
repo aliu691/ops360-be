@@ -1,4 +1,3 @@
-// src/modules/users/users.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -12,24 +11,24 @@ export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ unique: true })
-  name: string;
+  @Column()
+  firstName: string;
 
-  @Column({ nullable: true })
-  email?: string;
+  @Column()
+  lastName: string;
+
+  @Column()
+  email: string;
+
+  @Column({ type: 'text' })
+  department: string;
 
   @Column({ type: 'int', default: 0 })
-  weeklySalesTarget: number;
+  yearlyTarget: number;
 
-  @Column({ type: 'text', default: 'SALES_REP' })
-  role: 'ADMIN' | 'SALES_REP' | 'MANAGER';
+  @Column({ type: 'text', default: 'USER' })
+  authRole: 'USER';
 
   @Column({ type: 'text', default: 'ACTIVE' })
   status: 'ACTIVE' | 'INACTIVE';
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
 }
