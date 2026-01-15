@@ -15,7 +15,12 @@ export class UsersService {
   /* ---------------- CREATE ---------------- */
 
   async create(dto: CreateUserDto) {
-    const user = this.userRepo.create(dto);
+    const user = this.userRepo.create({
+      ...dto,
+      authRole: 'USER',
+      status: 'ACTIVE',
+    });
+
     await this.userRepo.save(user);
 
     return {
@@ -29,7 +34,7 @@ export class UsersService {
 
   async findAll() {
     const items = await this.userRepo.find({
-      order: { name: 'ASC' },
+      order: { firstName: 'ASC' },
     });
 
     return {
@@ -51,8 +56,8 @@ export class UsersService {
     };
   }
 
-  async findByName(name: string) {
-    return this.userRepo.findOne({ where: { name } });
+  async findByName(firstName: string) {
+    return this.userRepo.findOne({ where: { firstName } });
   }
 
   /* ---------------- UPDATE ---------------- */

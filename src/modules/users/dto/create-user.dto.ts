@@ -1,19 +1,19 @@
-import { IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsEmail, IsInt, IsString, Min } from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
-  name: string;
+  firstName: string;
 
-  @IsOptional()
   @IsString()
-  email?: string;
+  lastName: string;
 
-  @IsOptional()
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  department: string;
+
   @IsInt()
   @Min(0)
-  weeklySalesTarget?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  yearlyTarget: number;
 }
