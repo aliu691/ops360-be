@@ -4,9 +4,13 @@ import { UploadService } from './upload.service';
 import { MeetingsModule } from '../meetings/meetings.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { UsersModule } from '../users/users.module';
+import { PipelineModule } from '../pipeline/pipeline.module';
 
 @Module({
   imports: [
+    MeetingsModule,
+    PipelineModule,
+    UsersModule,
     MulterModule.register({
       dest: './uploads', // local folder storage
     }),

@@ -75,4 +75,56 @@ export class UploadController {
       },
     };
   }
+
+  @Post('pipeline')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadPipeline(
+    @UploadedFile() file: Express.Multer.File,
+
+    @Query('salesOwnerId') salesOwnerId?: string,
+    @Query('preSalesOwnerId') preSalesOwnerId?: string,
+    @Query('year') year?: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('file is missing');
+    }
+
+    if (!salesOwnerId) {
+      throw new BadRequestException('salesOwnerId is required');
+    }
+
+    if (!year) {
+      throw new BadRequestException('year is required');
+    }
+
+    const parsedSalesOwnerId = Number(salesOwnerId);
+    const parsedPreSalesOwnerId = preSalesOwnerId
+      ? Number(preSalesOwnerId)
+      : undefined;
+    const parsedYear = Number(year);
+
+    if (Number.isNaN(parsedSalesOwnerId)) {
+      throw new BadRequestException('salesOwnerId must be a number');
+    }
+
+    if (preSalesOwnerId && Number.isNaN(parsedPreSalesOwnerId)) {
+      throw new BadRequestException('preSalesOwnerId must be a number');
+    }
+
+    if (Number.isNaN(parsedYear)) {
+      throw new BadRequestException('year must be a number');
+    }
+
+    const result = await this.uploadService.processPipelineFile(file.path, {
+      salesOwnerId: parsedSalesOwnerId,
+      preSalesOwnerId: parsedPreSalesOwnerId,
+      year: parsedYear,
+    });
+
+    return {
+      success: true,
+      message: 'Pipeline uploaded successfully',
+      totalRows: result.totalRows,
+    };
+  }
 }
