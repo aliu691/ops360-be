@@ -1,7 +1,10 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
 import { MeetingsService } from '../meetings/meetings.service';
 import { PipelineService } from '../pipeline/pipeline.service';
+import { User } from '../users/users.entity';
 
 const FALLBACK_HEADER_MAP: Record<string, string> = {
   __EMPTY: 'Organization Name',
@@ -16,6 +19,9 @@ const FALLBACK_HEADER_MAP: Record<string, string> = {
 @Injectable()
 export class UploadService {
   private readonly logger = new Logger(UploadService.name);
+
+  @InjectRepository(User)
+  private readonly userRepo: Repository<User>;
 
   constructor(
     private readonly meetingsService: MeetingsService,
@@ -191,7 +197,17 @@ export class UploadService {
 
         const organizationName = row['Organization Name'];
         const opportunity = row['Opportunity'];
+
         const stageRaw = row['Deal Stage'];
+        const rawPresales = row['Presales'];
+
+        const presalesEmails =
+          typeof rawPresales === 'string'
+            ? rawPresales
+                .split(',')
+                .map((e) => e.trim().toLowerCase())
+                .filter(Boolean)
+            : [];
 
         if (!organizationName || !opportunity || !stageRaw) {
           this.logger.debug('Skipping invalid row', row);
@@ -207,6 +223,13 @@ export class UploadService {
           quarter,
         );
 
+        const preSalesOwners =
+          presalesEmails.length > 0
+            ? await this.userRepo.find({
+                where: { email: In(presalesEmails) },
+              })
+            : [];
+
         await this.pipelineService.upsertFromExcel({
           organizationName,
           dealName: opportunity,
@@ -216,7 +239,9 @@ export class UploadService {
           stageKey: normalizeStage(stageRaw),
 
           salesOwnerId: params.salesOwnerId,
-          preSalesOwnerId: params.preSalesOwnerId,
+
+          // ✅ PASS RESOLVED USERS (many-to-many)
+          preSalesOwners,
 
           expectedCloseDate,
 

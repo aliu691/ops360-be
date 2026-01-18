@@ -7,6 +7,8 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { User } from '../users/users.entity';
 import { DealStage } from '../deal-stages/deal-stage.entity';
@@ -14,7 +16,6 @@ import { DealStage } from '../deal-stages/deal-stage.entity';
 @Entity('pipeline_deals')
 @Index(['year', 'quarter'])
 @Index(['salesOwnerId'])
-@Index(['preSalesOwnerId'])
 export class PipelineDeal {
   /* -----------------------------
          Primary Key
@@ -54,12 +55,19 @@ export class PipelineDeal {
   @Column({ name: 'sales_owner_id' })
   salesOwnerId: number;
 
-  @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: 'pre_sales_owner_id' })
-  preSalesOwner?: User;
-
-  @Column({ name: 'pre_sales_owner_id', nullable: true })
-  preSalesOwnerId?: number;
+  @ManyToMany(() => User)
+  @JoinTable({
+    name: 'pipeline_deal_pre_sales',
+    joinColumn: {
+      name: 'deal_id',
+      referencedColumnName: 'id',
+    },
+    inverseJoinColumn: {
+      name: 'pre_sales_owner_id',
+      referencedColumnName: 'id',
+    },
+  })
+  preSalesOwners: User[];
 
   /* -----------------------------
          Deal Value (₦)

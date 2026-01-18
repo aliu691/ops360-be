@@ -1,12 +1,15 @@
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreatePipelineDealDto {
+  @IsString()
+  organizationName: string;
+
   @IsString()
   dealName: string;
 
   @IsInt()
   @Min(0)
-  dealValue: number;
+  dealValueExcel: number;
 
   @IsInt()
   stageId: number;
@@ -15,10 +18,19 @@ export class CreatePipelineDealDto {
   salesOwnerId: number;
 
   @IsOptional()
-  @IsInt()
-  preSalesOwnerId?: number;
+  @IsArray()
+  @IsInt({ each: true })
+  preSalesOwnerIds?: number[];
 
   @IsOptional()
   @IsString()
   expectedCloseDate?: string;
+
+  @IsOptional()
+  @IsString()
+  nextAction?: string;
+
+  @IsOptional()
+  @IsString()
+  redFlag?: string;
 }

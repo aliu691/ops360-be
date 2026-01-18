@@ -1,4 +1,12 @@
-import { IsString, IsOptional, IsInt, IsNumber, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  IsNumber,
+  Min,
+  IsArray,
+} from 'class-validator';
+import { User } from 'src/modules/users/users.entity';
 
 export class ImportPipelineDealDto {
   /* -----------------------------
@@ -30,8 +38,12 @@ export class ImportPipelineDealDto {
   salesOwnerId: number;
 
   @IsOptional()
-  @IsInt()
-  preSalesOwnerId?: number;
+  preSalesOwners?: User[];
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  preSalesOwnerIds?: number[];
 
   /* -----------------------------
        Dates & Notes
