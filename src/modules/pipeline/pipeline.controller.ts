@@ -1,10 +1,29 @@
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  Patch,
+} from '@nestjs/common';
 import { PipelineService } from './pipeline.service';
 import { CreatePipelineDealDto } from './dto/create-pipeline-deal.dto';
+import { UpdatePipelineDealDto } from './dto/update-pipeline-deal.dto';
 
 @Controller('pipeline')
 export class PipelineController {
   constructor(private readonly service: PipelineService) {}
+
+  @Post()
+  async createManual(@Body() dto: CreatePipelineDealDto) {
+    return this.service.createManualDeal(dto);
+  }
+
+  @Get('deal/:externalDealId')
+  async getByExternalDealId(@Param('externalDealId') externalDealId: string) {
+    return this.service.getByExternalDealId(externalDealId);
+  }
 
   @Get()
   async getAll(
@@ -31,16 +50,11 @@ export class PipelineController {
     });
   }
 
-  @Get('deal/:externalDealId')
-  async getByExternalDealId(@Param('externalDealId') externalDealId: string) {
-    return this.service.getByExternalDealId(externalDealId);
-  }
-
-  @Post()
-  async create(@Body() dto: CreatePipelineDealDto) {
-    return {
-      success: true,
-      item: await this.service.createManualDeal(dto),
-    };
+  @Patch(':externalDealId')
+  async updateDeal(
+    @Param('externalDealId') externalDealId: string,
+    @Body() dto: UpdatePipelineDealDto,
+  ) {
+    return this.service.updateDeal(externalDealId, dto);
   }
 }

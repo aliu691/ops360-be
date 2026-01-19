@@ -13,6 +13,7 @@ import { CreatePipelineDealDto } from './dto/create-pipeline-deal.dto';
 import { ImportPipelineDealDto } from './dto/import-pipeline.dto';
 import { In } from 'typeorm';
 import { User } from '../users/users.entity';
+import { UpdatePipelineDealDto } from './dto/update-pipeline-deal.dto';
 
 @Injectable()
 export class PipelineService {
@@ -90,42 +91,60 @@ export class PipelineService {
     salesOwnerId?: number;
     preSalesOwnerIds?: number[];
   }) {
-    const { page, limit } = filters;
+    const { page, limit, salesOwnerId } = filters;
 
     /** -----------------------------
-     * Base query (no pagination)
+     * Base query (shared filters)
      ------------------------------*/
     const baseQb = this.dealRepo
       .createQueryBuilder('deal')
-      .leftJoin('deal.preSalesOwners', 'preSalesOwners');
+      .leftJoin('deal.preSalesOwners', 'preSalesOwners')
+      .leftJoin('deal.stageExcel', 'stageExcel')
+      .leftJoin('deal.stageManual', 'stageManual');
 
     this.applyDealFilters(baseQb, filters);
 
     /** -----------------------------
-     * 1️⃣ Stage totals
+     * 1️⃣ Stage totals (effective + weighted)
      ------------------------------*/
     const stageTotalsRaw = await baseQb
       .clone()
-      .leftJoin('deal.stageExcel', 'stageExcel')
       .select([
-        'stageExcel.id AS "stageId"',
-        'stageExcel.key AS "stageKey"',
-        'stageExcel.name AS "stageName"',
-        'COUNT(deal.id)::int AS "count"',
-        'COALESCE(SUM(deal.dealValueExcel), 0)::float AS "amount"',
+        `COALESCE(stageManual.id, stageExcel.id) AS "stageId"`,
+        `COALESCE(stageManual.key, stageExcel.key) AS "stageKey"`,
+        `COALESCE(stageManual.name, stageExcel.name) AS "stageName"`,
+        `COALESCE(stageManual.probability, stageExcel.probability) AS "probability"`,
+
+        `COUNT(deal.id)::int AS "count"`,
+
+        `
+       SUM(
+         COALESCE(deal.dealValueManual, deal.dealValueExcel)
+       )::float AS "amount"
+       `,
+
+        `
+       SUM(
+         COALESCE(deal.dealValueManual, deal.dealValueExcel)
+         * (COALESCE(stageManual.probability, stageExcel.probability) / 100.0)
+       )::float AS "weightedAmount"
+       `,
       ])
-      .groupBy('stageExcel.id')
-      .addGroupBy('stageExcel.key')
-      .addGroupBy('stageExcel.name')
+      .groupBy('COALESCE(stageManual.id, stageExcel.id)')
+      .addGroupBy('COALESCE(stageManual.key, stageExcel.key)')
+      .addGroupBy('COALESCE(stageManual.name, stageExcel.name)')
+      .addGroupBy('COALESCE(stageManual.probability, stageExcel.probability)')
       .getRawMany();
 
     const stageTotals = stageTotalsRaw.reduce(
       (acc, row) => {
         acc[row.stageKey] = {
-          stageId: row.stageId,
+          stageId: Number(row.stageId),
           stageName: row.stageName,
-          count: row.count,
-          amount: row.amount,
+          probability: Number(row.probability),
+          count: Number(row.count),
+          amount: Number(row.amount),
+          weightedAmount: Number(row.weightedAmount),
         };
         return acc;
       },
@@ -133,7 +152,100 @@ export class PipelineService {
     );
 
     /** -----------------------------
-     * 2️⃣ Paginated results
+     * 2️⃣ Summary (pipeline KPIs)
+     ------------------------------*/
+    const summaryRaw = await baseQb
+      .clone()
+      .select([
+        `COUNT(deal.id)::int AS "totalDeals"`,
+
+        `
+        SUM(
+          COALESCE(deal.dealValueManual, deal.dealValueExcel)
+        )::float AS "totalPipelineAmount"
+        `,
+
+        `
+        SUM(
+          CASE
+            WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
+            THEN COALESCE(deal.dealValueManual, deal.dealValueExcel)
+            ELSE 0
+          END
+        )::float AS "closedWonAmount"
+        `,
+
+        `
+        COUNT(
+          CASE
+            WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
+            THEN 1
+          END
+        )::int AS "closedWonCount"
+        `,
+
+        `
+        SUM(
+          COALESCE(deal.dealValueManual, deal.dealValueExcel)
+          * (COALESCE(stageManual.probability, stageExcel.probability) / 100.0)
+        )::float AS "weightedForecast"
+        `,
+      ])
+      .getRawOne();
+
+    const totalDeals = Number(summaryRaw.totalDeals);
+    const totalPipelineAmount = Number(summaryRaw.totalPipelineAmount);
+    const closedWonAmount = Number(summaryRaw.closedWonAmount);
+    const closedWonCount = Number(summaryRaw.closedWonCount);
+    const weightedForecast = Number(summaryRaw.weightedForecast);
+
+    const avgDealSize =
+      totalDeals > 0 ? Math.round(totalPipelineAmount / totalDeals) : 0;
+
+    /**
+     * Quarterly target:
+     * - If salesOwnerId is present → use that user's yearlyTarget / 4
+     * - Otherwise → null (team/org view)
+     */
+    let quarterlyTarget: number | null = null;
+    let percentToTarget: number | null = null;
+
+    if (salesOwnerId) {
+      const owner = await this.userRepo.findOne({
+        where: { id: salesOwnerId },
+        select: ['yearlyTarget'],
+      });
+
+      if (owner?.yearlyTarget) {
+        quarterlyTarget = Math.round(owner.yearlyTarget / 4);
+        percentToTarget =
+          quarterlyTarget > 0
+            ? Math.round((closedWonAmount / quarterlyTarget) * 100)
+            : 0;
+      }
+    }
+
+    const summary = {
+      year: filters.year,
+      quarter: filters.quarter,
+
+      totalDeals,
+      totalPipelineAmount,
+
+      closedWon: {
+        count: closedWonCount,
+        amount: closedWonAmount,
+      },
+
+      quarterlyTarget,
+      percentToTarget,
+
+      avgDealSize,
+      weightedForecast,
+    };
+
+    /** -----------------------------
+     * 3️⃣ Paginated items
      ------------------------------*/
     const itemsQb = this.dealRepo
       .createQueryBuilder('deal')
@@ -154,7 +266,7 @@ export class PipelineService {
     const totalPages = Math.ceil(total / limit);
 
     /** -----------------------------
-     * Response
+     * Final response
      ------------------------------*/
     return {
       success: true,
@@ -162,6 +274,7 @@ export class PipelineService {
       limit,
       total,
       totalPages,
+      summary,
       stageTotals,
       items,
     };
@@ -174,7 +287,7 @@ export class PipelineService {
 
     const deal = await this.dealRepo.findOne({
       where: { externalDealId },
-      relations: ['salesOwner', 'preSalesOwner', 'stageExcel', 'stageManual'],
+      relations: ['salesOwner', 'preSalesOwners', 'stageExcel', 'stageManual'],
     });
 
     if (!deal) {
@@ -193,60 +306,176 @@ export class PipelineService {
   ------------------------------*/
 
   async createManualDeal(dto: CreatePipelineDealDto) {
-    const stage = await this.dealStagesService
-      .getAllOrdered()
-      .then((stages) => stages.find((s) => s.id === dto.stageId));
-
+    const stage = await this.dealStagesService.getById(dto.stageId);
     if (!stage) {
       throw new BadRequestException('Invalid deal stage');
     }
+
+    const salesOwner = await this.userRepo.findOneBy({
+      id: dto.salesOwnerId,
+    });
+    if (!salesOwner) {
+      throw new BadRequestException('Invalid sales owner');
+    }
+
+    const preSalesOwners = dto.preSalesOwnerIds?.length
+      ? await this.userRepo.findBy({
+          id: In(dto.preSalesOwnerIds),
+        })
+      : [];
 
     const closeDate = dto.expectedCloseDate
       ? new Date(dto.expectedCloseDate)
       : new Date();
 
-    const year = closeDate.getFullYear();
-    const quarter = Math.ceil((closeDate.getMonth() + 1) / 3) as 1 | 2 | 3 | 4;
+    const year = closeDate ? closeDate.getFullYear() : new Date().getFullYear();
 
-    const preSalesOwners = dto.preSalesOwnerIds?.length
-      ? await this.userRepo.findBy({ id: In(dto.preSalesOwnerIds) })
-      : [];
+    const month = closeDate.getMonth() + 1;
+    const quarter = Math.ceil(month / 3) as 1 | 2 | 3 | 4;
 
-    const deal = this.dealRepo.create({
-      organizationName: dto.organizationName,
-      dealName: dto.dealName,
+    // ✅ FORCE single entity creation
+    const deal = this.dealRepo.create() as PipelineDeal;
 
-      dealValueExcel: dto.dealValueExcel ?? 0,
+    // ✅ SAFE assignment
+    deal.organizationName = dto.organizationName;
+    deal.dealName = dto.dealName;
+    deal.dealValueExcel = dto.dealValue;
+    deal.stageExcelId = stage.id;
+    deal.salesOwnerId = salesOwner.id;
+    deal.preSalesOwners = preSalesOwners;
 
-      stageExcelId: stage.id,
-      salesOwnerId: dto.salesOwnerId,
-      preSalesOwners,
+    if (closeDate) {
+      deal.expectedCloseDate = closeDate;
+    }
 
-      expectedCloseDate: dto.expectedCloseDate
-        ? new Date(dto.expectedCloseDate)
-        : undefined,
+    deal.nextAction = dto.nextAction ?? undefined;
+    deal.redFlag = dto.redFlag ?? undefined;
 
-      nextAction: dto.nextAction?.trim() || undefined,
+    deal.year = year;
+    deal.quarter = quarter; // guaranteed 1–4
 
-      redFlag:
-        typeof dto.redFlag === 'string' && dto.redFlag.trim().length > 0
-          ? dto.redFlag.trim()
-          : undefined,
+    deal.source = 'UI';
+    deal.status = 'ACTIVE';
 
-      year,
-      quarter,
+    // 1️⃣ Save to get numeric ID
+    const saved = await this.dealRepo.save(deal);
 
-      source: 'UI', // ✅ FIXED
-      status: 'ACTIVE',
+    // 2️⃣ Generate external ID
+    saved.externalDealId = `OPS360-${String(saved.id).padStart(6, '0')}`;
+
+    // 3️⃣ Persist external ID
+    await this.dealRepo.save(saved);
+
+    const fullDeal = await this.dealRepo.findOne({
+      where: { id: saved.id },
+      relations: ['salesOwner', 'preSalesOwners', 'stageExcel', 'stageManual'],
     });
 
-    const savedDeal = await this.dealRepo.save(deal);
+    return {
+      success: true,
+      message: 'Deal created successfully',
+      deal: fullDeal,
+    };
+  }
 
-    savedDeal.externalDealId = `OPS360-${String(savedDeal.id).padStart(6, '0')}`;
+  /* -----------------------------
+     Update (UI)
+  ------------------------------*/
 
-    await this.dealRepo.save(savedDeal);
+  async updateDeal(externalDealId: string, dto: UpdatePipelineDealDto) {
+    const deal = await this.dealRepo.findOne({
+      where: { externalDealId },
+      relations: ['preSalesOwners'],
+    });
 
-    return savedDeal;
+    if (!deal) {
+      throw new NotFoundException(`Deal not found: ${externalDealId}`);
+    }
+
+    /** -----------------------------
+     * STAGE (MANUAL OVERRIDE)
+     ------------------------------*/
+    if (dto.stageId) {
+      const stage = await this.dealStagesService.getById(dto.stageId);
+      if (!stage) {
+        throw new BadRequestException('Invalid stage');
+      }
+      deal.stageManualId = stage.id;
+    }
+
+    /** -----------------------------
+     * OWNERSHIP
+     ------------------------------*/
+    if (dto.salesOwnerId) {
+      deal.salesOwnerId = dto.salesOwnerId;
+    }
+
+    if (dto.preSalesOwnerIds) {
+      deal.preSalesOwners = await this.userRepo.findBy({
+        id: In(dto.preSalesOwnerIds),
+      });
+    }
+
+    /** -----------------------------
+     * EXPECTED CLOSE DATE
+     ------------------------------*/
+    if (dto.expectedCloseDate) {
+      const date = new Date(dto.expectedCloseDate);
+      if (isNaN(date.getTime())) {
+        throw new BadRequestException('Invalid expectedCloseDate');
+      }
+
+      deal.expectedCloseDate = date;
+      deal.year = date.getFullYear();
+      deal.quarter = Math.ceil((date.getMonth() + 1) / 3) as 1 | 2 | 3 | 4;
+    }
+
+    /** -----------------------------
+     * MANUAL VALUE OVERRIDES
+     ------------------------------*/
+    if (dto.dealValue !== undefined) {
+      deal.dealValueManual = dto.dealValue;
+    }
+
+    if (dto.nextAction !== undefined) {
+      deal.nextAction = dto.nextAction;
+    }
+
+    if (dto.redFlag !== undefined) {
+      deal.redFlag = dto.redFlag;
+    }
+
+    /** -----------------------------
+     * BASIC INFO
+     ------------------------------*/
+    if (dto.organizationName !== undefined) {
+      deal.organizationName = dto.organizationName;
+    }
+
+    if (dto.dealName !== undefined) {
+      deal.dealName = dto.dealName;
+    }
+
+    /** -----------------------------
+     * SOURCE = UI (IMPORTANT)
+     ------------------------------*/
+    deal.source = 'UI';
+
+    await this.dealRepo.save(deal);
+
+    /** -----------------------------
+     * RETURN FULL OBJECT
+     ------------------------------*/
+    const fullDeal = await this.dealRepo.findOne({
+      where: { id: deal.id },
+      relations: ['salesOwner', 'preSalesOwners', 'stageExcel', 'stageManual'],
+    });
+
+    return {
+      success: true,
+      message: 'Deal updated successfully',
+      deal: fullDeal,
+    };
   }
 
   /* -----------------------------
@@ -318,47 +547,4 @@ export class PipelineService {
     // 3️⃣ Persist external ID
     return this.dealRepo.save(savedDeal);
   }
-}
-
-function buildFilters(params: {
-  year?: number;
-  quarter?: string;
-  stage?: string;
-}) {
-  const where: any = {};
-
-  // Year
-  if (params.year) {
-    where.year = params.year;
-  }
-
-  // Quarter (supports multiple)
-  if (params.quarter) {
-    const quarters = params.quarter
-      .split(',')
-      .map((q) => Number(q))
-      .filter((q) => [1, 2, 3, 4].includes(q));
-
-    if (quarters.length === 1) {
-      where.quarter = quarters[0];
-    } else if (quarters.length > 1) {
-      where.quarter = In(quarters);
-    }
-  }
-
-  // Stage (by key, supports multiple)
-  if (params.stage) {
-    const stages = params.stage
-      .split(',')
-      .map((s) => s.trim().toUpperCase())
-      .filter(Boolean);
-
-    if (stages.length > 0) {
-      where.stageExcel = {
-        key: stages.length === 1 ? stages[0] : In(stages),
-      };
-    }
-  }
-
-  return where;
 }

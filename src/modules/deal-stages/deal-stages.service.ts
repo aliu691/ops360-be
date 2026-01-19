@@ -24,6 +24,10 @@ export class DealStagesService {
     return this.repo.findOne({ where: { key } });
   }
 
+  async getById(id: number) {
+    return this.repo.findOne({ where: { id } });
+  }
+
   /* -----------------------------
      CREATE (admin-only later)
   ------------------------------*/

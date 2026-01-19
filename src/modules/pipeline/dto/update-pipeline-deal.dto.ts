@@ -1,4 +1,4 @@
-// create-pipeline-deal.dto.ts
+// update-pipeline-deal.dto.ts
 import {
   IsInt,
   IsOptional,
@@ -8,22 +8,27 @@ import {
   Min,
 } from 'class-validator';
 
-export class CreatePipelineDealDto {
+export class UpdatePipelineDealDto {
+  @IsOptional()
   @IsString()
-  organizationName: string;
+  organizationName?: string;
 
+  @IsOptional()
   @IsString()
-  dealName: string;
+  dealName?: string;
 
+  @IsOptional()
   @IsInt()
   @Min(0)
-  dealValue: number;
+  dealValue?: number;
 
+  @IsOptional()
   @IsInt()
-  stageId: number;
+  stageId?: number;
 
+  @IsOptional()
   @IsInt()
-  salesOwnerId: number;
+  salesOwnerId?: number;
 
   @IsOptional()
   @IsArray()
