@@ -41,7 +41,7 @@ export class PipelineController {
       limit: Number(limit),
       year,
       quarter,
-      stageKey,
+      //stageKey,
       stageId,
       salesOwnerId,
       preSalesOwnerIds: preSalesOwnerIds

@@ -82,7 +82,6 @@ export class UploadController {
     @UploadedFile() file: Express.Multer.File,
 
     @Query('salesOwnerId') salesOwnerId?: string,
-    @Query('preSalesOwnerId') preSalesOwnerId?: string,
     @Query('year') year?: string,
   ) {
     if (!file) {
@@ -98,17 +97,10 @@ export class UploadController {
     }
 
     const parsedSalesOwnerId = Number(salesOwnerId);
-    const parsedPreSalesOwnerId = preSalesOwnerId
-      ? Number(preSalesOwnerId)
-      : undefined;
     const parsedYear = Number(year);
 
     if (Number.isNaN(parsedSalesOwnerId)) {
       throw new BadRequestException('salesOwnerId must be a number');
-    }
-
-    if (preSalesOwnerId && Number.isNaN(parsedPreSalesOwnerId)) {
-      throw new BadRequestException('preSalesOwnerId must be a number');
     }
 
     if (Number.isNaN(parsedYear)) {
@@ -117,7 +109,6 @@ export class UploadController {
 
     const result = await this.uploadService.processPipelineFile(file.path, {
       salesOwnerId: parsedSalesOwnerId,
-      preSalesOwnerId: parsedPreSalesOwnerId,
       year: parsedYear,
     });
 

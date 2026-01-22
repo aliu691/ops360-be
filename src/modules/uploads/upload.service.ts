@@ -6,15 +6,15 @@ import { MeetingsService } from '../meetings/meetings.service';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { User } from '../users/users.entity';
 
-const FALLBACK_HEADER_MAP: Record<string, string> = {
-  __EMPTY: 'Organization Name',
-  __EMPTY_1: 'Opportunity',
-  __EMPTY_2: 'Deal Stage',
-  __EMPTY_3: 'Amount (NGN)',
-  __EMPTY_4: 'Expected close date',
-  __EMPTY_5: 'Next Action',
-  __EMPTY_6: 'RED FLAG',
-};
+// const FALLBACK_HEADER_MAP: Record<string, string> = {
+//   __EMPTY: 'Organization Name',
+//   __EMPTY_1: 'Opportunity',
+//   __EMPTY_2: 'Deal Stage',
+//   __EMPTY_3: 'Amount (NGN)',
+//   __EMPTY_4: 'Expected close date',
+//   __EMPTY_5: 'Next Action',
+//   __EMPTY_6: 'RED FLAG',
+// };
 
 @Injectable()
 export class UploadService {
@@ -116,51 +116,18 @@ export class UploadService {
     };
   }
 
-  /* ===============================
-     PIPELINE EXCEL IMPORT
-  ===============================*/
   async processPipelineFile(
     filePath: string,
     params: {
       salesOwnerId: number;
-      preSalesOwnerId?: number;
       year: number;
     },
   ) {
     const workbook = XLSX.readFile(filePath);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
     this.logger.log(
-      `Processing pipeline file: ${filePath} | year=${params.year}, salesOwner=${params.salesOwnerId}, preSales=${params.preSalesOwnerId}`,
+      `Processing pipeline file: ${filePath} | year=${params.year}, salesOwner=${params.salesOwnerId}`,
     );
-
-    // ✅ READ AS RAW ROWS
-    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, {
-      header: 1,
-      defval: null,
-    });
-    this.logger.log(`Parsed ${rows.length} raw rows from Excel`);
-
-    if (!rows.length) {
-      throw new BadRequestException('Empty pipeline file');
-    }
-
-    // ✅ FIND HEADER ROW
-    const headerRow = rows.find((r) => r.includes('Organization Name'));
-
-    if (!headerRow) {
-      throw new BadRequestException('Pipeline header row not found');
-    }
-
-    // ✅ MAP COLUMN INDEXES
-    const col = {
-      organization: headerRow.indexOf('Organization Name'),
-      opportunity: headerRow.indexOf('Opportunity'),
-      stage: headerRow.indexOf('Deal Stage'),
-      amount: headerRow.indexOf('Amount (NGN)'),
-      expectedClose: headerRow.indexOf('Expected close date'),
-      nextAction: headerRow.indexOf('Next Action'),
-      redFlag: headerRow.indexOf('RED FLAG'),
-    };
 
     const quarterMap: Record<string, 1 | 2 | 3 | 4> = {
       Q1: 1,
@@ -177,51 +144,66 @@ export class UploadService {
       const quarter = quarterMap[sheetName];
       const sheet = workbook.Sheets[sheetName];
 
-      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, {
+      this.logger.log(`Processing sheet "${sheetName}" as Q${quarter}`);
+
+      const rows = XLSX.utils.sheet_to_json<any[]>(sheet, {
+        header: 1,
         defval: null,
+        blankrows: false,
       });
 
-      this.logger.log(`Processing sheet ${sheetName} with ${rows.length} rows`);
+      // ✅ HEADER ROW (A1)
+      const headerRow = rows[0];
+      if (!headerRow) {
+        this.logger.warn(`No header row found in ${sheetName}`);
+        continue;
+      }
 
-      for (const rawRow of rows) {
-        const row = normalizeRow(rawRow);
+      const col = buildColumnIndex(headerRow);
+      this.logger.log(`Detected columns for ${sheetName}`, col);
 
-        // 🛑 SKIP HEADER ROWS (CRITICAL)
+      // 🛑 Safety guard
+      if (Object.keys(col).length === 0) {
+        this.logger.warn(`No columns detected for ${sheetName}`);
+        continue;
+      }
+
+      // ✅ DATA ROWS START AT ROW 2 (index 1)
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+
+        if (!row || !row[col.organization]) break;
+
+        const organizationName = row[col.organization];
+        const opportunity = row[col.opportunity];
+        const stageRaw = row[col.stage];
+
+        // 🚫 Skip TOTAL rows
         if (
-          row['Organization Name'] === 'Organization Name' ||
-          row['Deal Stage'] === 'Deal Stage'
+          typeof organizationName === 'string' &&
+          organizationName.toUpperCase().startsWith('TOTAL')
         ) {
-          this.logger.debug('Skipping header row', row);
           continue;
         }
 
-        const organizationName = row['Organization Name'];
-        const opportunity = row['Opportunity'];
+        if (!opportunity || !stageRaw) continue;
 
-        const stageRaw = row['Deal Stage'];
-        const rawPresales = row['Presales'];
+        const dealValue =
+          typeof row[col.amount] === 'number'
+            ? row[col.amount]
+            : Number(row[col.amount]?.toString().replace(/,/g, '')) || 0;
+
+        const expectedCloseDate = parseExpectedCloseDate(
+          row[col.expectedClose],
+        );
 
         const presalesEmails =
-          typeof rawPresales === 'string'
-            ? rawPresales
+          typeof row[col.presales] === 'string'
+            ? row[col.presales]
                 .split(',')
                 .map((e) => e.trim().toLowerCase())
                 .filter(Boolean)
             : [];
-
-        if (!organizationName || !opportunity || !stageRaw) {
-          this.logger.debug('Skipping invalid row', row);
-          continue;
-        }
-
-        const dealValue =
-          Number(row['Amount (NGN)']?.toString().replace(/,/g, '')) || 0;
-
-        const expectedCloseDate = parseExpectedCloseDate(
-          row['Expected close date'],
-          params.year,
-          quarter,
-        );
 
         const preSalesOwners =
           presalesEmails.length > 0
@@ -231,27 +213,21 @@ export class UploadService {
             : [];
 
         await this.pipelineService.upsertFromExcel({
-          organizationName,
-          dealName: opportunity,
-
-          dealValueExcel: Number.isFinite(dealValue) ? dealValue : 0,
-
-          stageKey: normalizeStage(stageRaw),
-
+          organizationName: organizationName.toString().trim(),
+          dealName: opportunity.toString().trim(),
+          dealValueExcel: dealValue,
+          stageKey: normalizeStage(stageRaw.toString()),
           salesOwnerId: params.salesOwnerId,
-
-          // ✅ PASS RESOLVED USERS (many-to-many)
           preSalesOwners,
-
           expectedCloseDate,
-
           nextAction:
-            typeof row['Next Action'] === 'string'
-              ? row['Next Action'].trim()
+            typeof row[col.nextAction] === 'string'
+              ? row[col.nextAction].trim()
               : undefined,
-
-          redFlag: normalizeRedFlag(row['RED FLAG']),
-
+          redFlag:
+            typeof row[col.redFlag] === 'string'
+              ? row[col.redFlag].trim()
+              : undefined,
           year: params.year,
           quarterRaw: `Q${quarter}`,
         });
@@ -260,9 +236,80 @@ export class UploadService {
       }
     }
 
+    this.logger.log(
+      `Pipeline import completed. Total rows processed: ${processed}`,
+    );
+
     return { totalRows: processed };
   }
 }
+
+function buildColumnIndex(headerRow: any[]) {
+  const index: Record<string, number> = {};
+
+  headerRow.forEach((cell, i) => {
+    if (!cell) return;
+
+    const key = cell.toString().trim().toLowerCase();
+
+    if (key.includes('organization')) index.organization = i;
+    if (key === 'opportunity') index.opportunity = i;
+    if (key.includes('deal stage')) index.stage = i;
+    if (key.includes('amount')) index.amount = i;
+    if (key.includes('presales')) index.presales = i;
+    if (key.includes('expected')) index.expectedClose = i;
+    if (key.includes('next action')) index.nextAction = i;
+    if (key.includes('red flag')) index.redFlag = i;
+  });
+
+  return index;
+}
+
+function parseExpectedCloseDate(value: any): Date | null {
+  if (!value) return null;
+
+  // Excel serial number
+  if (typeof value === 'number') {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const date = new Date(excelEpoch.getTime() + value * 86400000);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  // Already a Date
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value;
+  }
+
+  // String date
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function detectQuarter(sheetName: string): 1 | 2 | 3 | 4 | null {
+  const normalized = sheetName.trim().toUpperCase();
+
+  if (normalized.includes('Q1')) return 1;
+  if (normalized.includes('Q2')) return 2;
+  if (normalized.includes('Q3')) return 3;
+  if (normalized.includes('Q4')) return 4;
+
+  return null;
+}
+
+// function normalizeRedFlag(value: any): string | null {
+//   if (typeof value !== 'string') return null;
+
+//   const text = value.trim();
+//   if (!text) return null;
+
+//   // Kill legacy boolean-like values
+//   if (['open', 'closed', 'yes', 'no'].includes(text.toLowerCase())) {
+//     return null;
+//   }
+
+//   return text;
+// }
+
 function normalizeStage(raw: string): string {
   const value = raw.trim().toUpperCase();
 
@@ -274,71 +321,4 @@ function normalizeStage(raw: string): string {
   if (value.includes('QUALIFIED')) return 'QUALIFIED_OPPORTUNITY';
 
   throw new BadRequestException(`Invalid deal stage: ${raw}`);
-}
-
-function parseAmount(value: any): number | null {
-  if (!value) return null;
-
-  const cleaned = value
-    .toString()
-    .replace(/[₦,\s]/g, '')
-    .trim();
-
-  if (cleaned === '' || cleaned === '-' || isNaN(Number(cleaned))) {
-    return null;
-  }
-
-  return Number(cleaned);
-}
-
-function parseExpectedCloseDate(
-  value: any,
-  year: number,
-  quarter: 1 | 2 | 3 | 4,
-): Date | null {
-  if (!value) return null;
-
-  // Excel serial date (number)
-  if (typeof value === 'number') {
-    // Excel epoch starts at 1899-12-30
-    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-    const date = new Date(excelEpoch.getTime() + value * 86400000);
-
-    return isNaN(date.getTime()) ? null : date;
-  }
-
-  // Try normal date parsing
-  const parsed = new Date(value);
-  return isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function normalizeRedFlag(value: any): string | null {
-  if (typeof value !== 'string') return null;
-
-  const text = value.trim();
-  if (!text) return null;
-
-  // Kill legacy boolean-like values
-  if (['open', 'closed', 'yes', 'no'].includes(text.toLowerCase())) {
-    return null;
-  }
-
-  return text;
-}
-
-function normalizeRow(row: Record<string, any>) {
-  if (!row['Organization Name'] && row.__EMPTY) {
-    const normalized: Record<string, any> = {};
-
-    for (const key of Object.keys(row)) {
-      const mappedKey = FALLBACK_HEADER_MAP[key];
-      if (mappedKey) {
-        normalized[mappedKey] = row[key];
-      }
-    }
-
-    return normalized;
-  }
-
-  return row;
 }

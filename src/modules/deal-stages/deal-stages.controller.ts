@@ -12,10 +12,4 @@ export class DealStagesController {
       items: await this.service.getAllOrdered(),
     };
   }
-
-  // TEMP: remove or guard later
-  @Post('seed')
-  async seed() {
-    return this.service.seedDefaults();
-  }
 }
