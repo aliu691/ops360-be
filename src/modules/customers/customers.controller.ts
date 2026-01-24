@@ -54,11 +54,11 @@ export class CustomersController {
    * ====================== */
 
   @Post(':customerId/contacts')
-  createCustomerContacts(
+  createCustomerContact(
     @Param('customerId', ParseIntPipe) customerId: number,
-    @Body() dto: CreateCustomerContactsDto,
+    @Body() dto: CreateCustomerContactDto,
   ) {
-    return this.customersService.createCustomerContacts(customerId, dto);
+    return this.customersService.createCustomerContact(customerId, dto);
   }
 
   @Patch('contacts/:id')

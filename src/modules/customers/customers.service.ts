@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Customer } from './customer.entity';
 import { CustomerContact } from './customer-contact.entity';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -24,14 +29,23 @@ export class CustomersService {
    * ====================== */
 
   async createCustomer(dto: CreateCustomerDto) {
+    const name = dto.name.trim();
+
+    const existing = await this.customerRepo.findOne({
+      where: { name: ILike(name) },
+    });
+
+    if (existing) {
+      throw new ConflictException('A customer with this name already exists');
+    }
+
     const customer = this.customerRepo.create({
-      name: dto.name,
+      name,
       contacts: dto.contacts?.length ? dto.contacts : [],
     });
 
     const saved = await this.customerRepo.save(customer);
 
-    // ✅ Re-fetch with relations so contacts are included
     return this.customerRepo.findOne({
       where: { id: saved.id },
       relations: ['contacts'],
@@ -95,12 +109,10 @@ export class CustomersService {
 
     return {
       success: true,
-      meta: {
-        page,
-        limit: take,
-        total,
-        totalPages: Math.ceil(total / take),
-      },
+      page,
+      limit: take,
+      total,
+      totalPages: Math.ceil(total / take),
       customers,
     };
   }
@@ -109,9 +121,9 @@ export class CustomersService {
    * CUSTOMER CONTACT
    * ====================== */
 
-  async createCustomerContacts(
+  async createCustomerContact(
     customerId: number,
-    dto: CreateCustomerContactsDto,
+    dto: CreateCustomerContactDto,
   ) {
     const customer = await this.customerRepo.findOne({
       where: { id: customerId },
@@ -121,16 +133,17 @@ export class CustomersService {
       throw new NotFoundException('Customer not found');
     }
 
-    const contacts = dto.contacts.map((c) =>
-      this.contactRepo.create({
-        name: c.name,
-        email: c.email,
-        mobile: c.mobile,
-        customer,
-      }),
-    );
+    // Prevent empty contact
+    if (!dto.name && !dto.email && !dto.mobile) {
+      throw new BadRequestException('Contact cannot be empty');
+    }
 
-    return this.contactRepo.save(contacts);
+    const contact = this.contactRepo.create({
+      ...dto,
+      customer,
+    });
+
+    return this.contactRepo.save(contact);
   }
 
   async updateCustomerContact(id: number, dto: UpdateCustomerContactDto) {
