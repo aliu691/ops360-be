@@ -17,6 +17,7 @@ import { EmailModule } from './modules/email/email.modules';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { PipelineModule } from './modules/pipeline/pipeline.module';
 import { DealStagesModule } from './modules/deal-stages/deal-stages.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   providers: [
@@ -69,6 +70,7 @@ import { DealStagesModule } from './modules/deal-stages/deal-stages.module';
     DepartmentsModule,
     PipelineModule,
     DealStagesModule,
+    CustomersModule,
   ],
 })
 export class AppModule {}

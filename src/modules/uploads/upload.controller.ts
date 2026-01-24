@@ -118,4 +118,10 @@ export class UploadController {
       totalRows: result.totalRows,
     };
   }
+
+  @Post('customers')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadCustomers(@UploadedFile() file: Express.Multer.File) {
+    return this.uploadService.processCustomersFile(file);
+  }
 }
