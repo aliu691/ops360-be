@@ -13,6 +13,7 @@ import { CreateCustomerContactDto } from './dto/create-customer-contact.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { UpdateCustomerContactDto } from './dto/update-customer-contact.dto';
 import { CreateCustomerContactsDto } from './dto/create-customer-contacts.dto';
+import { PipelineDeal } from '../pipeline/pipeline-deal.entity';
 
 @Injectable()
 export class CustomersService {
@@ -22,7 +23,32 @@ export class CustomersService {
 
     @InjectRepository(CustomerContact)
     private contactRepo: Repository<CustomerContact>,
+
+    @InjectRepository(PipelineDeal)
+    private dealRepo: Repository<PipelineDeal>,
   ) {}
+
+  private async getCustomerDealStats(customerId: number) {
+    const stats = await this.dealRepo
+      .createQueryBuilder('deal')
+      .select([
+        `COUNT(deal.id)::int AS "dealCount"`,
+        `
+        COALESCE(
+          SUM(COALESCE(deal.dealValueManual, deal.dealValueExcel)),
+          0
+        )::float AS "totalDealSize"
+        `,
+      ])
+      .where('deal.customer_id = :customerId', { customerId })
+      .andWhere('deal.status = :status', { status: 'ACTIVE' })
+      .getRawOne();
+
+    return {
+      dealCount: Number(stats.dealCount),
+      totalDealSize: Number(stats.totalDealSize),
+    };
+  }
 
   /* ======================
    * CUSTOMER
@@ -87,12 +113,18 @@ export class CustomersService {
     });
 
     if (!customer) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('Customer not found');
     }
+
+    const stats = await this.getCustomerDealStats(customer.id);
 
     return {
       success: true,
-      item: customer,
+      item: {
+        ...customer,
+        dealCount: stats.dealCount,
+        totalDealSize: stats.totalDealSize,
+      },
     };
   }
 
@@ -114,6 +146,55 @@ export class CustomersService {
       total,
       totalPages: Math.ceil(total / take),
       customers,
+    };
+  }
+
+  async getCustomerDeals(
+    customerId: number,
+    page = 1,
+    limit = 20,
+    stageId?: number,
+  ) {
+    const take = Math.min(limit, 100);
+    const skip = (page - 1) * take;
+
+    const qb = this.dealRepo
+      .createQueryBuilder('deal')
+      .select('deal')
+      .leftJoinAndSelect('deal.salesOwner', 'salesOwner')
+      .leftJoinAndSelect('deal.preSalesOwners', 'preSalesOwners')
+      .leftJoinAndSelect('deal.stageExcel', 'stageExcel')
+      .leftJoinAndSelect('deal.stageManual', 'stageManual')
+      .where('deal.customer_id = :customerId', { customerId })
+      .andWhere('deal.status = :status', { status: 'ACTIVE' });
+
+    if (stageId) {
+      qb.andWhere(
+        `
+        (
+          stageManual.id = :stageId
+          OR (stageManual.id IS NULL AND stageExcel.id = :stageId)
+        )
+        `,
+        { stageId },
+      );
+    }
+
+    qb.orderBy('deal.updatedAt', 'DESC').take(take).skip(skip);
+
+    const [deals, total] = await qb.getManyAndCount();
+
+    return {
+      success: true,
+      page,
+      limit: take,
+      total,
+      totalPages: Math.ceil(total / take),
+      items: deals.map((deal) => ({
+        ...deal,
+        displayValue: Number(deal.dealValueManual ?? deal.dealValueExcel ?? 0),
+        displayStage: deal.stageManual ?? deal.stageExcel,
+      })),
     };
   }
 

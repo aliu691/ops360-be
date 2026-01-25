@@ -14,6 +14,8 @@ import { In } from 'typeorm';
 import { User } from '../users/users.entity';
 import { UpdatePipelineDealDto } from './dto/update-pipeline-deal.dto';
 import { PIPELINE_CONFIG } from 'src/config/pipeline.config';
+import { CustomersService } from '../customers/customers.service';
+import { Customer } from '../customers/customer.entity';
 
 @Injectable()
 export class PipelineService {
@@ -23,7 +25,10 @@ export class PipelineService {
     private readonly dealRepo: Repository<PipelineDeal>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Customer)
+    private readonly customerRepo: Repository<Customer>,
     private readonly dealStagesService: DealStagesService,
+    private readonly customersService: CustomersService,
   ) {}
 
   /* -----------------------------
@@ -46,33 +51,37 @@ export class PipelineService {
     filters: {
       year?: number;
       quarter?: number;
-      stageId?: number;
-      stageKey?: string;
       salesOwnerId?: number;
+      customerId?: number;
       preSalesOwnerIds?: number[];
     },
   ) {
-    const { year, quarter, stageId, stageKey, salesOwnerId, preSalesOwnerIds } =
-      filters;
+    if (filters.year) {
+      qb.andWhere('deal.year = :year', { year: filters.year });
+    }
 
-    if (year) qb.andWhere('deal.year = :year', { year });
-    if (quarter) qb.andWhere('deal.quarter = :quarter', { quarter });
-
-    if (stageKey) {
-      qb.andWhere('stageExcel.key = :stageKey', {
-        stageKey: stageKey.toUpperCase(),
+    if (filters.quarter) {
+      qb.andWhere('deal.quarter = :quarter', {
+        quarter: filters.quarter,
       });
-    } else if (stageId) {
-      qb.andWhere('deal.stageExcelId = :stageId', { stageId });
     }
 
-    if (salesOwnerId) {
-      qb.andWhere('deal.salesOwnerId = :salesOwnerId', { salesOwnerId });
+    if (filters.salesOwnerId) {
+      qb.andWhere('deal.salesOwnerId = :salesOwnerId', {
+        salesOwnerId: filters.salesOwnerId,
+      });
     }
 
-    if (preSalesOwnerIds?.length) {
+    // ✅ CUSTOMER FILTER
+    if (filters.customerId) {
+      qb.andWhere('deal.customer_id = :customerId', {
+        customerId: filters.customerId,
+      });
+    }
+
+    if (filters.preSalesOwnerIds?.length) {
       qb.andWhere('preSalesOwners.id IN (:...preSalesOwnerIds)', {
-        preSalesOwnerIds,
+        preSalesOwnerIds: filters.preSalesOwnerIds,
       });
     }
   }
@@ -83,6 +92,14 @@ export class PipelineService {
 
     return {
       ...deal,
+
+      // ✅ customer object (minimal + safe)
+      customer: deal.customer
+        ? {
+            id: deal.customer.id,
+            name: deal.customer.name,
+          }
+        : null,
 
       // 🔑 normalized fields for frontend
       displayValue: effectiveValue !== null ? Number(effectiveValue) : null,
@@ -97,40 +114,40 @@ export class PipelineService {
     };
   }
 
-  private async resolveYearlyTarget({
-    salesOwnerId,
-    preSalesOwnerIds,
-  }: {
-    salesOwnerId?: number;
-    preSalesOwnerIds?: number[];
-  }): Promise<number> {
-    // 🎯 Case 1: single sales owner
-    if (salesOwnerId) {
-      const salesUser = await this.userRepo.findOne({
-        where: { id: salesOwnerId },
-        select: ['yearlyTarget'],
-      });
+  //   private async resolveYearlyTarget({
+  //     salesOwnerId,
+  //     preSalesOwnerIds,
+  //   }: {
+  //     salesOwnerId?: number;
+  //     preSalesOwnerIds?: number[];
+  //   }): Promise<number> {
+  //     // 🎯 Case 1: single sales owner
+  //     if (salesOwnerId) {
+  //       const salesUser = await this.userRepo.findOne({
+  //         where: { id: salesOwnerId },
+  //         select: ['yearlyTarget'],
+  //       });
 
-      if (salesUser?.yearlyTarget) {
-        return salesUser.yearlyTarget;
-      }
-    }
+  //       if (salesUser?.yearlyTarget) {
+  //         return salesUser.yearlyTarget;
+  //       }
+  //     }
 
-    // 🎯 Case 2: single pre-sales owner
-    if (preSalesOwnerIds?.length === 1) {
-      const preSalesUser = await this.userRepo.findOne({
-        where: { id: preSalesOwnerIds[0] },
-        select: ['yearlyTarget'],
-      });
+  //     // 🎯 Case 2: single pre-sales owner
+  //     if (preSalesOwnerIds?.length === 1) {
+  //       const preSalesUser = await this.userRepo.findOne({
+  //         where: { id: preSalesOwnerIds[0] },
+  //         select: ['yearlyTarget'],
+  //       });
 
-      if (preSalesUser?.yearlyTarget) {
-        return preSalesUser.yearlyTarget;
-      }
-    }
+  //       if (preSalesUser?.yearlyTarget) {
+  //         return preSalesUser.yearlyTarget;
+  //       }
+  //     }
 
-    // 🎯 Case 3: company-wide default
-    return PIPELINE_CONFIG.COMPANY_YEARLY_TARGET;
-  }
+  //     // 🎯 Case 3: company-wide default
+  //     return PIPELINE_CONFIG.COMPANY_YEARLY_TARGET;
+  //   }
 
   /* -----------------------------
      READ
@@ -143,9 +160,10 @@ export class PipelineService {
     quarter?: number;
     stageId?: number;
     salesOwnerId?: number;
+    customerId?: number;
     preSalesOwnerIds?: number[];
   }) {
-    const { page, limit, salesOwnerId } = filters;
+    const { page, limit, salesOwnerId, customerId } = filters;
 
     /* ======================================================
      * BASE QUERY (shared filters)
@@ -296,11 +314,10 @@ export class PipelineService {
         quarterlyTarget = Math.round(salesOwner.yearlyTarget / 4);
       }
     } else if (filters.preSalesOwnerIds?.length) {
-
-    /**
-     * RULE 2:
-     * Only pre-sales owners (no sales owner)
-     */
+      /**
+       * RULE 2:
+       * Only pre-sales owners (no sales owner)
+       */
       const preSalesOwners = await this.userRepo.find({
         where: { id: In(filters.preSalesOwnerIds) },
         select: ['yearlyTarget'],
@@ -348,6 +365,7 @@ export class PipelineService {
       .leftJoinAndSelect('deal.preSalesOwners', 'preSalesOwners')
       .leftJoinAndSelect('deal.stageExcel', 'stageExcel')
       .leftJoinAndSelect('deal.stageManual', 'stageManual')
+      .leftJoinAndSelect('deal.customer', 'customer')
       .distinct(true);
 
     this.applyDealFilters(itemsQb, filters);
@@ -399,7 +417,13 @@ export class PipelineService {
 
     const fullDeal = await this.dealRepo.findOne({
       where: { externalDealId },
-      relations: ['salesOwner', 'preSalesOwners', 'stageExcel', 'stageManual'],
+      relations: [
+        'salesOwner',
+        'preSalesOwners',
+        'stageExcel',
+        'stageManual',
+        'customer',
+      ],
     });
 
     if (!fullDeal) {
@@ -430,6 +454,13 @@ export class PipelineService {
       throw new BadRequestException('Invalid sales owner');
     }
 
+    const customer = await this.customerRepo.findOneBy({
+      id: dto.customerId,
+    });
+    if (!customer) {
+      throw new BadRequestException('Invalid customer');
+    }
+
     const preSalesOwners = dto.preSalesOwnerIds?.length
       ? await this.userRepo.findBy({ id: In(dto.preSalesOwnerIds) })
       : [];
@@ -446,10 +477,13 @@ export class PipelineService {
     /** -----------------------------
      * CORE FIELDS
      ------------------------------*/
-    deal.organizationName = dto.organizationName;
+    deal.customer = customer;
+    deal.organizationName = customer.name; // 🔑 derived
     deal.dealName = dto.dealName;
+
     deal.dealValueExcel = dto.dealValue;
     deal.stageExcelId = stage.id;
+
     deal.salesOwnerId = salesOwner.id;
     deal.preSalesOwners = preSalesOwners;
 
@@ -472,7 +506,13 @@ export class PipelineService {
 
     const fullDeal = await this.dealRepo.findOne({
       where: { id: saved.id },
-      relations: ['salesOwner', 'preSalesOwners', 'stageExcel', 'stageManual'],
+      relations: [
+        'customer',
+        'salesOwner',
+        'preSalesOwners',
+        'stageExcel',
+        'stageManual',
+      ],
     });
 
     return {
@@ -489,7 +529,7 @@ export class PipelineService {
   async updateDeal(externalDealId: string, dto: UpdatePipelineDealDto) {
     const deal = await this.dealRepo.findOne({
       where: { externalDealId },
-      relations: ['preSalesOwners'],
+      relations: ['preSalesOwners', 'customer'],
     });
 
     if (!deal) {
@@ -497,9 +537,25 @@ export class PipelineService {
     }
 
     /** -----------------------------
-     * STAGE (MANUAL OVERRIDE)
-     ------------------------------*/
-    if (dto.stageId) {
+   * CUSTOMER CHANGE
+   ------------------------------*/
+    if (dto.customerId !== undefined) {
+      const customer = await this.customerRepo.findOneBy({
+        id: dto.customerId,
+      });
+
+      if (!customer) {
+        throw new BadRequestException('Invalid customer');
+      }
+
+      deal.customer = customer;
+      deal.organizationName = customer.name; // 🔑 sync
+    }
+
+    /** -----------------------------
+   * STAGE (MANUAL OVERRIDE)
+   ------------------------------*/
+    if (dto.stageId !== undefined) {
       const stage = await this.dealStagesService.getById(dto.stageId);
       if (!stage) {
         throw new BadRequestException('Invalid stage');
@@ -508,8 +564,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-     * OWNERSHIP
-     ------------------------------*/
+   * OWNERSHIP
+   ------------------------------*/
     if (dto.salesOwnerId !== undefined) {
       deal.salesOwnerId = dto.salesOwnerId;
     }
@@ -521,8 +577,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-     * EXPECTED CLOSE DATE
-     ------------------------------*/
+   * EXPECTED CLOSE DATE
+   ------------------------------*/
     if (dto.expectedCloseDate !== undefined) {
       const date = new Date(dto.expectedCloseDate);
       if (isNaN(date.getTime())) {
@@ -535,8 +591,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-     * MANUAL VALUE OVERRIDE
-     ------------------------------*/
+   * MANUAL VALUE OVERRIDE
+   ------------------------------*/
     if (dto.dealValue !== undefined) {
       deal.dealValueManual = dto.dealValue;
     }
@@ -550,29 +606,25 @@ export class PipelineService {
     }
 
     /** -----------------------------
-     * BASIC INFO
-     ------------------------------*/
-    if (dto.organizationName !== undefined) {
-      deal.organizationName = dto.organizationName;
-    }
-
+   * BASIC INFO
+   ------------------------------*/
     if (dto.dealName !== undefined) {
       deal.dealName = dto.dealName;
     }
 
-    /** -----------------------------
-     * SOURCE
-     ------------------------------*/
     deal.source = 'UI';
 
     await this.dealRepo.save(deal);
 
-    /** -----------------------------
-     * LOAD FULL DEAL
-     ------------------------------*/
     const fullDeal = await this.dealRepo.findOne({
       where: { id: deal.id },
-      relations: ['salesOwner', 'preSalesOwners', 'stageExcel', 'stageManual'],
+      relations: [
+        'customer',
+        'salesOwner',
+        'preSalesOwners',
+        'stageExcel',
+        'stageManual',
+      ],
     });
 
     return {
@@ -589,6 +641,9 @@ export class PipelineService {
   async upsertFromExcel(dto: ImportPipelineDealDto) {
     const quarter = this.parseQuarter(dto.quarterRaw);
 
+    /** -----------------------------
+     * 1️⃣ Check for existing Excel deal
+     ------------------------------*/
     const existing = await this.dealRepo.findOne({
       where: {
         organizationName: dto.organizationName,
@@ -608,24 +663,38 @@ export class PipelineService {
       return existing;
     }
 
+    /** -----------------------------
+     * 2️⃣ Resolve stage
+     ------------------------------*/
     const stage = await this.dealStagesService.findByKey(dto.stageKey);
     if (!stage) {
       throw new BadRequestException(`Invalid deal stage: ${dto.stageKey}`);
     }
 
-    // ✅ FORCE SINGLE ENTITY
+    /** -----------------------------
+     * 3️⃣ Resolve customer (KEY CHANGE)
+     ------------------------------*/
+    const customer = dto.organizationName
+      ? await this.customersService.findOrCreateCustomerByName(
+          dto.organizationName,
+        )
+      : null;
+
+    /** -----------------------------
+     * 4️⃣ Create deal
+     ------------------------------*/
     const deal = this.dealRepo.create() as PipelineDeal;
 
     Object.assign(deal, {
+      // keep raw organization name for traceability
       organizationName: dto.organizationName,
-      dealName: dto.dealName,
 
+      dealName: dto.dealName,
       dealValueExcel: dto.dealValueExcel ?? 0,
 
       stageExcelId: stage.id,
       salesOwnerId: dto.salesOwnerId,
 
-      // ✅ MANY-TO-MANY
       preSalesOwners: dto.preSalesOwners ?? [],
 
       expectedCloseDate: dto.expectedCloseDate ?? null,
@@ -642,13 +711,18 @@ export class PipelineService {
       status: 'ACTIVE',
     });
 
-    // 1️⃣ Save → get numeric ID
+    // ✅ Attach customer relationship
+    if (customer) {
+      deal.customer = customer;
+    }
+
+    /** -----------------------------
+     * 5️⃣ Save → generate external ID
+     ------------------------------*/
     const savedDeal = await this.dealRepo.save(deal);
 
-    // 2️⃣ Generate OPS360 ID
     savedDeal.externalDealId = `OPS360-${String(savedDeal.id).padStart(6, '0')}`;
 
-    // 3️⃣ Persist external ID
     return this.dealRepo.save(savedDeal);
   }
 }

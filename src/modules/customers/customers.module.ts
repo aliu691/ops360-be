@@ -4,9 +4,12 @@ import { Customer } from './customer.entity';
 import { CustomerContact } from './customer-contact.entity';
 import { CustomersService } from './customers.service';
 import { CustomersController } from './customers.controller';
+import { PipelineDeal } from '../pipeline/pipeline-deal.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Customer, CustomerContact])],
+  imports: [
+    TypeOrmModule.forFeature([Customer, CustomerContact, PipelineDeal]),
+  ],
   controllers: [CustomersController],
   providers: [CustomersService],
   exports: [CustomersService],

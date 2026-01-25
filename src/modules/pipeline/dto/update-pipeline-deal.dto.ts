@@ -10,8 +10,8 @@ import {
 
 export class UpdatePipelineDealDto {
   @IsOptional()
-  @IsString()
-  organizationName?: string;
+  @IsInt()
+  customerId?: number;
 
   @IsOptional()
   @IsString()

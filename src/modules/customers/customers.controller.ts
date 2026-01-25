@@ -49,6 +49,21 @@ export class CustomersController {
     return this.customersService.getCustomerById(id);
   }
 
+  @Get(':id/deals')
+  getCustomerDeals(
+    @Param('id') id: number,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+    @Query('stageId') stageId?: number,
+  ) {
+    return this.customersService.getCustomerDeals(
+      Number(id),
+      Number(page),
+      Number(limit),
+      stageId ? Number(stageId) : undefined,
+    );
+  }
+
   /* ======================
    * CUSTOMER CONTACT
    * ====================== */
