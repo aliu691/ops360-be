@@ -31,9 +31,9 @@ export class PipelineController {
     @Query('limit') limit = 20,
     @Query('year') year?: number,
     @Query('quarter') quarter?: number,
-    @Query('stage') stageKey?: string, // ✅ NEW
-    @Query('stageId') stageId?: number, // optional fallback
+    @Query('stageId') stageId?: number,
     @Query('salesOwnerId') salesOwnerId?: number,
+    @Query('customerId') customerId?: number, // ✅ NEW
     @Query('preSalesOwnerIds') preSalesOwnerIds?: string,
   ) {
     return this.service.getAllDeals({
@@ -41,9 +41,9 @@ export class PipelineController {
       limit: Number(limit),
       year,
       quarter,
-      //stageKey,
       stageId,
       salesOwnerId,
+      customerId, // ✅ pass through
       preSalesOwnerIds: preSalesOwnerIds
         ? preSalesOwnerIds.split(',').map(Number)
         : undefined,

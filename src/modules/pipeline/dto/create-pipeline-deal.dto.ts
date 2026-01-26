@@ -9,8 +9,8 @@ import {
 } from 'class-validator';
 
 export class CreatePipelineDealDto {
-  @IsString()
-  organizationName: string;
+  @IsInt()
+  customerId: number;
 
   @IsString()
   dealName: string;

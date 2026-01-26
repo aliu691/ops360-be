@@ -2,19 +2,10 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
+import { CustomersService } from '../customers/customers.service';
 import { MeetingsService } from '../meetings/meetings.service';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { User } from '../users/users.entity';
-
-// const FALLBACK_HEADER_MAP: Record<string, string> = {
-//   __EMPTY: 'Organization Name',
-//   __EMPTY_1: 'Opportunity',
-//   __EMPTY_2: 'Deal Stage',
-//   __EMPTY_3: 'Amount (NGN)',
-//   __EMPTY_4: 'Expected close date',
-//   __EMPTY_5: 'Next Action',
-//   __EMPTY_6: 'RED FLAG',
-// };
 
 @Injectable()
 export class UploadService {
@@ -26,6 +17,7 @@ export class UploadService {
   constructor(
     private readonly meetingsService: MeetingsService,
     private readonly pipelineService: PipelineService,
+    private readonly customersService: CustomersService,
   ) {}
 
   async processMeetingsFile(
@@ -117,16 +109,16 @@ export class UploadService {
   }
 
   async processPipelineFile(
-    filePath: string,
+    fileBuffer: Buffer,
     params: {
       salesOwnerId: number;
       year: number;
     },
   ) {
-    const workbook = XLSX.readFile(filePath);
+    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
     this.logger.log(
-      `Processing pipeline file: ${filePath} | year=${params.year}, salesOwner=${params.salesOwnerId}`,
+      `Processing pipeline upload | year=${params.year}, salesOwner=${params.salesOwnerId}`,
     );
 
     const quarterMap: Record<string, 1 | 2 | 3 | 4> = {
@@ -242,6 +234,99 @@ export class UploadService {
 
     return { totalRows: processed };
   }
+
+  async processCustomersFile(file: Express.Multer.File) {
+    console.log('📥 Starting customer upload processing');
+    console.log('📄 File received:', {
+      originalname: file?.originalname,
+      mimetype: file?.mimetype,
+      size: file?.size,
+      hasBuffer: !!file?.buffer,
+    });
+
+    // 🔒 HARD GUARD — prevents XLSX crash
+    if (!file || !file.buffer) {
+      throw new BadRequestException(
+        'No file uploaded or file buffer missing. Ensure multipart/form-data with key "file".',
+      );
+    }
+
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json<{
+      ORGANIZATION: string | null;
+      'CONTACT PERSON': string | null;
+      EMAIL: string | null;
+      'MOBILE NO.': string | null;
+    }>(sheet, { defval: null });
+
+    console.log(`📄 Parsed ${rows.length} rows from Excel`);
+
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const row = rows[rowIndex];
+
+      const customerName = toOptionalString(row.ORGANIZATION);
+
+      if (!customerName) {
+        console.log(`⏭️  Row ${rowIndex + 1}: skipped (no organization)`);
+        continue;
+      }
+
+      /** -----------------------------
+       * 1️⃣ Find or create customer
+       ------------------------------*/
+      const customer =
+        await this.customersService.findOrCreateCustomerByName(customerName);
+
+      /** -----------------------------
+       * 2️⃣ Parse contacts
+       ------------------------------*/
+      const names = row['CONTACT PERSON']
+        ? String(row['CONTACT PERSON'])
+            .split(/\n|,/)
+            .map((v) => v.trim())
+            .filter(Boolean)
+        : [];
+
+      const emails = row.EMAIL
+        ? String(row.EMAIL)
+            .split(/\n|,/)
+            .map((v) => v.trim())
+        : [];
+
+      const mobiles = row['MOBILE NO.']
+        ? String(row['MOBILE NO.'])
+            .split(/\n|,/)
+            .map((v) => v.trim())
+        : [];
+
+      /** -----------------------------
+       * 3️⃣ Create contacts
+       ------------------------------*/
+      for (let i = 0; i < names.length; i++) {
+        await this.customersService.addCustomerContact({
+          customer,
+          name: toOptionalString(names[i]),
+          email: toOptionalString(emails[i]),
+          mobile: toOptionalString(mobiles[i]),
+        });
+      }
+    }
+
+    console.log('✅ Customer upload processing completed');
+
+    return {
+      success: true,
+      message: 'Customers added successfully',
+    };
+  }
+}
+
+function toOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function buildColumnIndex(headerRow: any[]) {
@@ -284,31 +369,6 @@ function parseExpectedCloseDate(value: any): Date | null {
   const parsed = new Date(value);
   return isNaN(parsed.getTime()) ? null : parsed;
 }
-
-function detectQuarter(sheetName: string): 1 | 2 | 3 | 4 | null {
-  const normalized = sheetName.trim().toUpperCase();
-
-  if (normalized.includes('Q1')) return 1;
-  if (normalized.includes('Q2')) return 2;
-  if (normalized.includes('Q3')) return 3;
-  if (normalized.includes('Q4')) return 4;
-
-  return null;
-}
-
-// function normalizeRedFlag(value: any): string | null {
-//   if (typeof value !== 'string') return null;
-
-//   const text = value.trim();
-//   if (!text) return null;
-
-//   // Kill legacy boolean-like values
-//   if (['open', 'closed', 'yes', 'no'].includes(text.toLowerCase())) {
-//     return null;
-//   }
-
-//   return text;
-// }
 
 function normalizeStage(raw: string): string {
   const value = raw.trim().toUpperCase();

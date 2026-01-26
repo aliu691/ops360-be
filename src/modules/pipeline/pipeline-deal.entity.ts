@@ -12,6 +12,7 @@ import {
 } from 'typeorm';
 import { User } from '../users/users.entity';
 import { DealStage } from '../deal-stages/deal-stage.entity';
+import { Customer } from '../customers/customer.entity';
 
 @Entity('pipeline_deals')
 @Index(['year', 'quarter'])
@@ -82,10 +83,12 @@ export class PipelineDeal {
 
   @Column({
     name: 'deal_value_manual',
-    type: 'bigint',
+    type: 'numeric',
+    precision: 15,
+    scale: 2,
     nullable: true,
   })
-  dealValueManual?: number;
+  dealValueManual: number;
 
   /* -----------------------------
          Deal Stage
@@ -152,13 +155,6 @@ export class PipelineDeal {
   })
   source: 'EXCEL' | 'UI';
 
-  /**
-   * ❌ REMOVED CONCEPTUALLY
-   * Excel is create-only; no syncing
-   *
-   * last_excel_sync_at
-   */
-
   @Column({
     name: 'status',
     type: 'text',
@@ -174,6 +170,17 @@ export class PipelineDeal {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  /* -----------------------------
+         System Dates
+      ------------------------------*/
+
+  @ManyToOne(() => Customer, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'customer_id' })
+  customer?: Customer;
 
   /* =====================================================
          🔹 DERIVED (NOT STORED)

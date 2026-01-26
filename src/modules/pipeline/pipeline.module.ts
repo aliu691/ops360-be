@@ -6,12 +6,15 @@ import { PipelineController } from './pipeline.controller';
 import { DealStagesModule } from '../deal-stages/deal-stages.module';
 import { UsersModule } from '../users/users.module';
 import { User } from '../users/users.entity';
+import { Customer } from '../customers/customer.entity';
+import { CustomersModule } from '../customers/customers.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PipelineDeal, User]),
+    TypeOrmModule.forFeature([PipelineDeal, User, Customer]),
     DealStagesModule,
     UsersModule,
+    CustomersModule,
   ],
   providers: [PipelineService],
   controllers: [PipelineController],
