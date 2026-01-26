@@ -6,6 +6,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { PipelineDeal } from '../pipeline/pipeline-deal.entity';
 import { CustomerContact } from './customer-contact.entity';
 
 @Entity('customers')
@@ -16,6 +17,9 @@ export class Customer {
   // CLIENT ORGANIZATION
   @Column({ unique: true })
   name: string;
+
+  @OneToMany(() => PipelineDeal, (deal) => deal.customer)
+  deals: PipelineDeal[];
 
   @OneToMany(() => CustomerContact, (contact) => contact.customer, {
     cascade: true,

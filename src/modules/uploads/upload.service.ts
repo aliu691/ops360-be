@@ -109,16 +109,16 @@ export class UploadService {
   }
 
   async processPipelineFile(
-    filePath: string,
+    fileBuffer: Buffer,
     params: {
       salesOwnerId: number;
       year: number;
     },
   ) {
-    const workbook = XLSX.readFile(filePath);
+    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
     this.logger.log(
-      `Processing pipeline file: ${filePath} | year=${params.year}, salesOwner=${params.salesOwnerId}`,
+      `Processing pipeline upload | year=${params.year}, salesOwner=${params.salesOwnerId}`,
     );
 
     const quarterMap: Record<string, 1 | 2 | 3 | 4> = {

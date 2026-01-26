@@ -83,10 +83,12 @@ export class PipelineDeal {
 
   @Column({
     name: 'deal_value_manual',
-    type: 'bigint',
+    type: 'numeric',
+    precision: 15,
+    scale: 2,
     nullable: true,
   })
-  dealValueManual?: number;
+  dealValueManual: number;
 
   /* -----------------------------
          Deal Stage

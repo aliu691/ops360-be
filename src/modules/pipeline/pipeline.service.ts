@@ -86,6 +86,57 @@ export class PipelineService {
     }
   }
 
+  private applyDealFiltersForAggregation(
+    qb: SelectQueryBuilder<any>,
+    filters: {
+      year?: number;
+      quarter?: number;
+      salesOwnerId?: number;
+      customerId?: number;
+      preSalesOwnerIds?: number[];
+    },
+  ) {
+    if (filters.year) {
+      qb.andWhere('deal.year = :year', { year: filters.year });
+    }
+
+    if (filters.quarter) {
+      qb.andWhere('deal.quarter = :quarter', {
+        quarter: filters.quarter,
+      });
+    }
+
+    if (filters.salesOwnerId) {
+      qb.andWhere('deal.salesOwnerId = :salesOwnerId', {
+        salesOwnerId: filters.salesOwnerId,
+      });
+    }
+
+    if (filters.customerId) {
+      qb.andWhere('deal.customer_id = :customerId', {
+        customerId: filters.customerId,
+      });
+    }
+
+    /**
+     * ✅ CRITICAL DIFFERENCE
+     * NO JOIN — use EXISTS to avoid duplication
+     */
+    if (filters.preSalesOwnerIds?.length) {
+      qb.andWhere(
+        `
+        EXISTS (
+          SELECT 1
+          FROM pipeline_deals_pre_sales_owners_users ps
+          WHERE ps.pipelineDealId = deal.id
+          AND ps.usersId IN (:...preSalesOwnerIds)
+        )
+        `,
+        { preSalesOwnerIds: filters.preSalesOwnerIds },
+      );
+    }
+  }
+
   private normalizeDeal(deal: any) {
     const effectiveStage = deal.stageManual ?? deal.stageExcel;
     const effectiveValue = deal.dealValueManual ?? deal.dealValueExcel;
@@ -153,6 +204,263 @@ export class PipelineService {
      READ
   ------------------------------*/
 
+  //   async getAllDeals(filters: {
+  //     page: number;
+  //     limit: number;
+  //     year?: number;
+  //     quarter?: number;
+  //     stageId?: number;
+  //     salesOwnerId?: number;
+  //     customerId?: number;
+  //     preSalesOwnerIds?: number[];
+  //   }) {
+  //     const { page, limit, salesOwnerId, customerId } = filters;
+
+  //     /* ======================================================
+  //      * BASE QUERY (shared filters)
+  //      * ====================================================== */
+  //     const baseQb = this.dealRepo
+  //       .createQueryBuilder('deal')
+  //       .leftJoin('deal.stageExcel', 'stageExcel')
+  //       .leftJoin('deal.stageManual', 'stageManual')
+  //       .leftJoin('deal.preSalesOwners', 'preSalesOwners');
+
+  //     this.applyDealFilters(baseQb, filters);
+
+  //     // ✅ IMPORTANT: stage filter must use EFFECTIVE stage
+  //     if (filters.stageId) {
+  //       baseQb.andWhere(`COALESCE(stageManual.id, stageExcel.id) = :stageId`, {
+  //         stageId: filters.stageId,
+  //       });
+  //     }
+
+  //     /* ======================================================
+  //      * 1️⃣ STAGE TOTALS (FUNNEL)
+  //      * ====================================================== */
+  //     const stageTotalsRaw = await baseQb
+  //       .clone()
+  //       .select([
+  //         `COALESCE(stageManual.id, stageExcel.id) AS "stageId"`,
+  //         `COALESCE(stageManual.key, stageExcel.key) AS "stageKey"`,
+  //         `COALESCE(stageManual.name, stageExcel.name) AS "stageName"`,
+  //         `COALESCE(stageManual.probability, stageExcel.probability) AS "probability"`,
+
+  //         `COUNT(DISTINCT deal.id)::int AS "count"`,
+
+  //         `
+  //         SUM(
+  //           COALESCE(deal.dealValueManual, deal.dealValueExcel)
+  //         )::float AS "amount"
+  //         `,
+
+  //         `
+  //         SUM(
+  //           COALESCE(deal.dealValueManual, deal.dealValueExcel)
+  //           * (COALESCE(stageManual.probability, stageExcel.probability) / 100.0)
+  //         )::float AS "weightedAmount"
+  //         `,
+  //       ])
+  //       .groupBy(`COALESCE(stageManual.id, stageExcel.id)`)
+  //       .addGroupBy(`COALESCE(stageManual.key, stageExcel.key)`)
+  //       .addGroupBy(`COALESCE(stageManual.name, stageExcel.name)`)
+  //       .addGroupBy(`COALESCE(stageManual.probability, stageExcel.probability)`)
+  //       .getRawMany();
+
+  //     const stageTotals = stageTotalsRaw.reduce(
+  //       (acc, row) => {
+  //         acc[row.stageKey] = {
+  //           stageId: Number(row.stageId),
+  //           stageName: row.stageName,
+  //           probability: Number(row.probability),
+  //           count: Number(row.count),
+  //           amount: Number(row.amount),
+  //           weightedAmount: Number(row.weightedAmount),
+  //         };
+  //         return acc;
+  //       },
+  //       {} as Record<string, any>,
+  //     );
+
+  //     /* ======================================================
+  //      * 2️⃣ SUMMARY
+  //      * ====================================================== */
+  //     const summaryRaw = await baseQb
+  //       .clone()
+  //       .select([
+  //         // ✅ TOTAL DEALS
+  //         `COUNT(DISTINCT deal.id)::int AS "totalDeals"`,
+
+  //         // ✅ TOTAL PIPELINE
+  //         `
+  //     SUM(
+  //       DISTINCT COALESCE(deal.dealValueManual, deal.dealValueExcel)
+  //     )::float AS "totalPipelineAmount"
+  //     `,
+
+  //         // ✅ CLOSED WON AMOUNT (DISTINCT DEALS ONLY)
+  //         `
+  //     SUM(
+  //       DISTINCT CASE
+  //         WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
+  //         THEN COALESCE(deal.dealValueManual, deal.dealValueExcel)
+  //         ELSE NULL
+  //       END
+  //     )::float AS "closedWonAmount"
+  //     `,
+
+  //         // ✅ CLOSED WON COUNT (DISTINCT DEALS ONLY)
+  //         `
+  //     COUNT(
+  //       DISTINCT CASE
+  //         WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
+  //         THEN deal.id
+  //       END
+  //     )::int AS "closedWonCount"
+  //     `,
+
+  //         // ✅ WEIGHTED FORECAST (DISTINCT DEALS)
+  //         `
+  //     SUM(
+  //       DISTINCT
+  //       COALESCE(deal.dealValueManual, deal.dealValueExcel)
+  //       * (COALESCE(stageManual.probability, stageExcel.probability) / 100.0)
+  //     )::float AS "weightedForecast"
+  //     `,
+  //       ])
+  //       .getRawOne();
+
+  //     const totalDeals = Number(summaryRaw.totalDeals);
+  //     const totalPipelineAmount = Number(summaryRaw.totalPipelineAmount);
+  //     const closedWonAmount = Number(summaryRaw.closedWonAmount);
+  //     const closedWonCount = Number(summaryRaw.closedWonCount);
+  //     const weightedForecast = Number(summaryRaw.weightedForecast);
+
+  //     const avgDealSize =
+  //       totalDeals > 0 ? Math.round(totalPipelineAmount / totalDeals) : 0;
+
+  //     /* ======================================================
+  //      * 🎯 TARGET RESOLUTION (SALES > PRE-SALES > COMPANY)
+  //      * ====================================================== */
+
+  //     // 1️⃣ Company default (fallback)
+  //     const companyYearlyTarget =
+  //       Number(PIPELINE_CONFIG.COMPANY_YEARLY_TARGET) || 0;
+
+  //     let yearlyTarget: number | null = companyYearlyTarget;
+  //     let quarterlyTarget: number | null =
+  //       companyYearlyTarget > 0 ? Math.round(companyYearlyTarget / 4) : null;
+
+  //     /**
+  //      * RULE 1:
+  //      * If salesOwnerId exists → ALWAYS use sales owner target
+  //      */
+  //     if (filters.salesOwnerId) {
+  //       const salesOwner = await this.userRepo.findOne({
+  //         where: { id: filters.salesOwnerId },
+  //         select: ['yearlyTarget'],
+  //       });
+
+  //       if (salesOwner?.yearlyTarget) {
+  //         yearlyTarget = salesOwner.yearlyTarget;
+  //         quarterlyTarget = Math.round(salesOwner.yearlyTarget / 4);
+  //       }
+  //     } else if (filters.preSalesOwnerIds?.length) {
+  //       /**
+  //        * RULE 2:
+  //        * Only pre-sales owners (no sales owner)
+  //        */
+  //       const preSalesOwners = await this.userRepo.find({
+  //         where: { id: In(filters.preSalesOwnerIds) },
+  //         select: ['yearlyTarget'],
+  //       });
+
+  //       const summedPreSalesTarget = preSalesOwners.reduce(
+  //         (sum, user) => sum + (user.yearlyTarget || 0),
+  //         0,
+  //       );
+
+  //       if (summedPreSalesTarget > 0) {
+  //         yearlyTarget = summedPreSalesTarget;
+  //         quarterlyTarget = Math.round(summedPreSalesTarget / 4);
+  //       }
+  //     }
+
+  //     // 3️⃣ Percent to target (final resolved target)
+  //     const percentToTarget =
+  //       yearlyTarget && yearlyTarget > 0
+  //         ? Math.round((closedWonAmount / yearlyTarget) * 100)
+  //         : null;
+
+  //     const summary = {
+  //       year: filters.year,
+  //       quarter: filters.quarter,
+  //       totalDeals,
+  //       totalPipelineAmount,
+  //       closedWon: {
+  //         count: closedWonCount,
+  //         amount: closedWonAmount,
+  //       },
+  //       yearlyTarget,
+  //       quarterlyTarget,
+  //       percentToTarget,
+  //       avgDealSize,
+  //       weightedForecast,
+  //     };
+
+  //     /* ======================================================
+  //      * 3️⃣ PAGINATED ITEMS (MODAL)
+  //      * ====================================================== */
+  //     const itemsQb = this.dealRepo
+  //       .createQueryBuilder('deal')
+  //       .leftJoinAndSelect('deal.salesOwner', 'salesOwner')
+  //       .leftJoinAndSelect('deal.preSalesOwners', 'preSalesOwners')
+  //       .leftJoinAndSelect('deal.stageExcel', 'stageExcel')
+  //       .leftJoinAndSelect('deal.stageManual', 'stageManual')
+  //       .leftJoinAndSelect('deal.customer', 'customer')
+  //       .distinct(true);
+
+  //     this.applyDealFilters(itemsQb, filters);
+
+  //     if (filters.stageId) {
+  //       itemsQb.andWhere(`COALESCE(stageManual.id, stageExcel.id) = :stageId`, {
+  //         stageId: filters.stageId,
+  //       });
+  //     }
+
+  //     itemsQb
+  //       .orderBy('deal.updatedAt', 'DESC')
+  //       .skip((page - 1) * limit)
+  //       .take(limit);
+
+  //     const [items, total] = await itemsQb.getManyAndCount();
+  //     const totalPages = Math.ceil(total / limit);
+
+  //     const normalizedItems = items.map((deal) => {
+  //       const effectiveStage = deal.stageManual ?? deal.stageExcel;
+  //       const effectiveValue = deal.dealValueManual ?? deal.dealValueExcel;
+
+  //       return {
+  //         ...deal,
+  //         displayValue: Number(effectiveValue),
+  //         displayStage: effectiveStage,
+  //       };
+  //     });
+
+  //     /* ======================================================
+  //      * FINAL RESPONSE
+  //      * ====================================================== */
+  //     return {
+  //       success: true,
+  //       page,
+  //       limit,
+  //       total,
+  //       totalPages,
+  //       summary,
+  //       stageTotals,
+  //       items: normalizedItems,
+  //     };
+  //   }
+
   async getAllDeals(filters: {
     page: number;
     limit: number;
@@ -163,31 +471,15 @@ export class PipelineService {
     customerId?: number;
     preSalesOwnerIds?: number[];
   }) {
-    const { page, limit, salesOwnerId, customerId } = filters;
+    const { page, limit } = filters;
 
     /* ======================================================
-     * BASE QUERY (shared filters)
+     * 1️⃣ STAGE TOTALS (SAFE AGGREGATION)
      * ====================================================== */
-    const baseQb = this.dealRepo
+    const stageTotalsQb = this.dealRepo
       .createQueryBuilder('deal')
       .leftJoin('deal.stageExcel', 'stageExcel')
       .leftJoin('deal.stageManual', 'stageManual')
-      .leftJoin('deal.preSalesOwners', 'preSalesOwners');
-
-    this.applyDealFilters(baseQb, filters);
-
-    // ✅ IMPORTANT: stage filter must use EFFECTIVE stage
-    if (filters.stageId) {
-      baseQb.andWhere(`COALESCE(stageManual.id, stageExcel.id) = :stageId`, {
-        stageId: filters.stageId,
-      });
-    }
-
-    /* ======================================================
-     * 1️⃣ STAGE TOTALS (FUNNEL)
-     * ====================================================== */
-    const stageTotalsRaw = await baseQb
-      .clone()
       .select([
         `COALESCE(stageManual.id, stageExcel.id) AS "stageId"`,
         `COALESCE(stageManual.key, stageExcel.key) AS "stageKey"`,
@@ -209,13 +501,25 @@ export class PipelineService {
         )::float AS "weightedAmount"
         `,
       ])
+      .where('deal.status = :status', { status: 'ACTIVE' });
+
+    this.applyDealFiltersForAggregation(stageTotalsQb, filters);
+
+    if (filters.stageId) {
+      stageTotalsQb.andWhere(
+        `COALESCE(stageManual.id, stageExcel.id) = :stageId`,
+        { stageId: filters.stageId },
+      );
+    }
+
+    const stageTotalsResult = await stageTotalsQb
       .groupBy(`COALESCE(stageManual.id, stageExcel.id)`)
       .addGroupBy(`COALESCE(stageManual.key, stageExcel.key)`)
       .addGroupBy(`COALESCE(stageManual.name, stageExcel.name)`)
       .addGroupBy(`COALESCE(stageManual.probability, stageExcel.probability)`)
       .getRawMany();
 
-    const stageTotals = stageTotalsRaw.reduce(
+    const stageTotals = stageTotalsResult.reduce(
       (acc, row) => {
         acc[row.stageKey] = {
           stageId: Number(row.stageId),
@@ -231,50 +535,51 @@ export class PipelineService {
     );
 
     /* ======================================================
-     * 2️⃣ SUMMARY
+     * 2️⃣ SUMMARY (SAFE AGGREGATION)
      * ====================================================== */
-    const summaryRaw = await baseQb
-      .clone()
+    const summaryQb = this.dealRepo
+      .createQueryBuilder('deal')
+      .leftJoin('deal.stageExcel', 'stageExcel')
+      .leftJoin('deal.stageManual', 'stageManual')
+      .where('deal.status = :status', { status: 'ACTIVE' });
+
+    this.applyDealFiltersForAggregation(summaryQb, filters);
+
+    const summaryRaw = await summaryQb
       .select([
-        // ✅ TOTAL DEALS
         `COUNT(DISTINCT deal.id)::int AS "totalDeals"`,
 
-        // ✅ TOTAL PIPELINE
         `
-    SUM(
-      DISTINCT COALESCE(deal.dealValueManual, deal.dealValueExcel)
-    )::float AS "totalPipelineAmount"
-    `,
+        SUM(
+          COALESCE(deal.dealValueManual, deal.dealValueExcel)
+        )::float AS "totalPipelineAmount"
+        `,
 
-        // ✅ CLOSED WON AMOUNT (DISTINCT DEALS ONLY)
         `
-    SUM(
-      DISTINCT CASE
-        WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
-        THEN COALESCE(deal.dealValueManual, deal.dealValueExcel)
-        ELSE NULL
-      END
-    )::float AS "closedWonAmount"
-    `,
+        SUM(
+          CASE
+            WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
+            THEN COALESCE(deal.dealValueManual, deal.dealValueExcel)
+            ELSE 0
+          END
+        )::float AS "closedWonAmount"
+        `,
 
-        // ✅ CLOSED WON COUNT (DISTINCT DEALS ONLY)
         `
-    COUNT(
-      DISTINCT CASE
-        WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
-        THEN deal.id
-      END
-    )::int AS "closedWonCount"
-    `,
+        COUNT(
+          DISTINCT CASE
+            WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
+            THEN deal.id
+          END
+        )::int AS "closedWonCount"
+        `,
 
-        // ✅ WEIGHTED FORECAST (DISTINCT DEALS)
         `
-    SUM(
-      DISTINCT
-      COALESCE(deal.dealValueManual, deal.dealValueExcel)
-      * (COALESCE(stageManual.probability, stageExcel.probability) / 100.0)
-    )::float AS "weightedForecast"
-    `,
+        SUM(
+          COALESCE(deal.dealValueManual, deal.dealValueExcel)
+          * (COALESCE(stageManual.probability, stageExcel.probability) / 100.0)
+        )::float AS "weightedForecast"
+        `,
       ])
       .getRawOne();
 
@@ -288,10 +593,8 @@ export class PipelineService {
       totalDeals > 0 ? Math.round(totalPipelineAmount / totalDeals) : 0;
 
     /* ======================================================
-     * 🎯 TARGET RESOLUTION (SALES > PRE-SALES > COMPANY)
+     * 🎯 TARGET RESOLUTION (RESTORED)
      * ====================================================== */
-
-    // 1️⃣ Company default (fallback)
     const companyYearlyTarget =
       Number(PIPELINE_CONFIG.COMPANY_YEARLY_TARGET) || 0;
 
@@ -299,10 +602,6 @@ export class PipelineService {
     let quarterlyTarget: number | null =
       companyYearlyTarget > 0 ? Math.round(companyYearlyTarget / 4) : null;
 
-    /**
-     * RULE 1:
-     * If salesOwnerId exists → ALWAYS use sales owner target
-     */
     if (filters.salesOwnerId) {
       const salesOwner = await this.userRepo.findOne({
         where: { id: filters.salesOwnerId },
@@ -314,27 +613,22 @@ export class PipelineService {
         quarterlyTarget = Math.round(salesOwner.yearlyTarget / 4);
       }
     } else if (filters.preSalesOwnerIds?.length) {
-      /**
-       * RULE 2:
-       * Only pre-sales owners (no sales owner)
-       */
       const preSalesOwners = await this.userRepo.find({
         where: { id: In(filters.preSalesOwnerIds) },
         select: ['yearlyTarget'],
       });
 
-      const summedPreSalesTarget = preSalesOwners.reduce(
-        (sum, user) => sum + (user.yearlyTarget || 0),
+      const summedTarget = preSalesOwners.reduce(
+        (sum, u) => sum + (u.yearlyTarget || 0),
         0,
       );
 
-      if (summedPreSalesTarget > 0) {
-        yearlyTarget = summedPreSalesTarget;
-        quarterlyTarget = Math.round(summedPreSalesTarget / 4);
+      if (summedTarget > 0) {
+        yearlyTarget = summedTarget;
+        quarterlyTarget = Math.round(summedTarget / 4);
       }
     }
 
-    // 3️⃣ Percent to target (final resolved target)
     const percentToTarget =
       yearlyTarget && yearlyTarget > 0
         ? Math.round((closedWonAmount / yearlyTarget) * 100)
@@ -357,7 +651,7 @@ export class PipelineService {
     };
 
     /* ======================================================
-     * 3️⃣ PAGINATED ITEMS (MODAL)
+     * 3️⃣ PAGINATED ITEMS (ENTITY QUERY)
      * ====================================================== */
     const itemsQb = this.dealRepo
       .createQueryBuilder('deal')
@@ -366,6 +660,7 @@ export class PipelineService {
       .leftJoinAndSelect('deal.stageExcel', 'stageExcel')
       .leftJoinAndSelect('deal.stageManual', 'stageManual')
       .leftJoinAndSelect('deal.customer', 'customer')
+      .where('deal.status = :status', { status: 'ACTIVE' })
       .distinct(true);
 
     this.applyDealFilters(itemsQb, filters);
@@ -382,28 +677,19 @@ export class PipelineService {
       .take(limit);
 
     const [items, total] = await itemsQb.getManyAndCount();
-    const totalPages = Math.ceil(total / limit);
 
-    const normalizedItems = items.map((deal) => {
-      const effectiveStage = deal.stageManual ?? deal.stageExcel;
-      const effectiveValue = deal.dealValueManual ?? deal.dealValueExcel;
+    const normalizedItems = items.map((deal) => ({
+      ...deal,
+      displayValue: Number(deal.dealValueManual ?? deal.dealValueExcel),
+      displayStage: deal.stageManual ?? deal.stageExcel,
+    }));
 
-      return {
-        ...deal,
-        displayValue: Number(effectiveValue),
-        displayStage: effectiveStage,
-      };
-    });
-
-    /* ======================================================
-     * FINAL RESPONSE
-     * ====================================================== */
     return {
       success: true,
       page,
       limit,
       total,
-      totalPages,
+      totalPages: Math.ceil(total / limit),
       summary,
       stageTotals,
       items: normalizedItems,
@@ -432,7 +718,7 @@ export class PipelineService {
 
     return {
       success: true,
-      message: 'Deal retrieved successfully.',
+      message: 'Deals retrieved successfully.',
       deal: this.normalizeDeal(fullDeal),
     };
   }

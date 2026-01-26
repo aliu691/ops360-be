@@ -80,7 +80,6 @@ export class UploadController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadPipeline(
     @UploadedFile() file: Express.Multer.File,
-
     @Query('salesOwnerId') salesOwnerId?: string,
     @Query('year') year?: string,
   ) {
@@ -107,10 +106,13 @@ export class UploadController {
       throw new BadRequestException('year must be a number');
     }
 
-    const result = await this.uploadService.processPipelineFile(file.path, {
-      salesOwnerId: parsedSalesOwnerId,
-      year: parsedYear,
-    });
+    const result = await this.uploadService.processPipelineFile(
+      file.buffer, // ✅ CHANGE HERE
+      {
+        salesOwnerId: parsedSalesOwnerId,
+        year: parsedYear,
+      },
+    );
 
     return {
       success: true,

@@ -88,22 +88,46 @@ export class CustomersService {
   }
 
   async findOrCreateCustomerByName(customerName: string): Promise<Customer> {
-    let customer = await this.customerRepo.findOne({
-      where: { name: customerName },
-    });
+    const normalized = customerName.trim();
 
-    if (!customer) {
-      customer = this.customerRepo.create({ name: customerName });
-      customer = await this.customerRepo.save(customer);
+    // 1️⃣ Case-insensitive lookup (matches UNIQUE lower(name))
+    let customer = await this.customerRepo
+      .createQueryBuilder('c')
+      .where('LOWER(c.name) = LOWER(:name)', { name: normalized })
+      .getOne();
 
-      console.log(`🏢 Created customer "${customerName}" (id=${customer.id})`);
-    } else {
+    if (customer) {
       console.log(
-        `🔁 Existing customer "${customerName}" reused (id=${customer.id})`,
+        `🔁 Existing customer "${customer.name}" reused (id=${customer.id})`,
       );
+      return customer;
     }
 
-    return customer;
+    // 2️⃣ Create safely
+    try {
+      customer = this.customerRepo.create({ name: normalized });
+      customer = await this.customerRepo.save(customer);
+
+      console.log(`🏢 Created customer "${customer.name}" (id=${customer.id})`);
+      return customer;
+    } catch (err: any) {
+      // 3️⃣ Handle race condition (duplicate insert)
+      if (err.code === '23505') {
+        customer = await this.customerRepo
+          .createQueryBuilder('c')
+          .where('LOWER(c.name) = LOWER(:name)', { name: normalized })
+          .getOne();
+
+        if (customer) {
+          console.log(
+            `🔁 Existing customer "${customer.name}" reused after race (id=${customer.id})`,
+          );
+          return customer;
+        }
+      }
+
+      throw err;
+    }
   }
 
   async getCustomerById(id: number) {
@@ -129,15 +153,45 @@ export class CustomersService {
   }
 
   async getAllCustomers(page = 1, limit = 20) {
-    const take = Math.min(limit, 100); // safety cap
+    const take = Math.min(limit, 100);
     const skip = (page - 1) * take;
 
-    const [customers, total] = await this.customerRepo.findAndCount({
-      relations: ['contacts'],
-      order: { name: 'ASC' },
-      take,
-      skip,
-    });
+    const qb = this.customerRepo
+      .createQueryBuilder('customer')
+      .leftJoin('customer.deals', 'deal', 'deal.status = :status', {
+        status: 'ACTIVE',
+      })
+      .leftJoinAndSelect('customer.contacts', 'contact')
+      .select([
+        'customer.id',
+        'customer.name',
+        'customer.createdAt',
+        'customer.updatedAt',
+        'contact',
+        `COUNT(deal.id)::int AS "dealCount"`,
+        `
+        COALESCE(
+          SUM(COALESCE(deal.dealValueManual, deal.dealValueExcel)),
+          0
+        )::float AS "totalDealSize"
+        `,
+      ])
+      .groupBy('customer.id')
+      .addGroupBy('contact.id')
+      .orderBy('customer.name', 'ASC')
+      .take(take)
+      .skip(skip);
+
+    const [raw, total] = await Promise.all([
+      qb.getRawAndEntities(),
+      this.customerRepo.count(),
+    ]);
+
+    const customers = raw.entities.map((customer, index) => ({
+      ...customer,
+      dealCount: Number(raw.raw[index].dealCount),
+      totalDealSize: Number(raw.raw[index].totalDealSize),
+    }));
 
     return {
       success: true,
