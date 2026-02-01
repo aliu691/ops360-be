@@ -17,7 +17,7 @@ export class UsersService {
   async create(dto: CreateUserDto) {
     const user = this.userRepo.create({
       ...dto,
-      authRole: 'USER',
+      // authRole: 'USER',
       status: 'ACTIVE',
     });
 

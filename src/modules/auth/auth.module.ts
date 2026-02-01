@@ -6,7 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AdminsModule } from '../admins/admins.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { JwtStrategy } from './jwt.strategy';
+import { AdminJwtStrategy } from './admin-jwt.strategy';
 
 @Module({
   imports: [
@@ -18,13 +18,13 @@ import { JwtStrategy } from './jwt.strategy';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET'),
+        secret: config.get<string>('ADMIN_JWT_SECRET'),
         signOptions: { expiresIn: '12h' },
       }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, AdminJwtStrategy],
   exports: [JwtModule],
 })
 export class AuthModule {}

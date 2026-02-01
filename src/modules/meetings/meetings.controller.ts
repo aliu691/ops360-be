@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import { MeetingsService } from './meetings.service';
 
 @Controller('meetings')
@@ -12,8 +12,36 @@ export class MeetingsController {
    * - Pagination
    * - Optional reporting month + week filters
    */
+  // @Get()
+  // async getMeetings(
+  //   @Query('repName') repName?: string,
+  //   @Query('month') month?: string,
+  //   @Query('week') week?: number,
+  //   @Query('page') page = 1,
+  //   @Query('limit') limit = 20,
+  // ) {
+  //   const filters = {
+  //     month,
+  //     week: week !== undefined ? Number(week) : undefined,
+  //   };
+
+  //   // Rep-specific view
+  //   if (repName) {
+  //     return this.meetingsService.getMeetingsByRep(
+  //       repName,
+  //       page,
+  //       limit,
+  //       filters,
+  //     );
+  //   }
+
+  //   // Default UI view (⚠️ MUST FILTER)
+  //   return this.meetingsService.getAllMeetings(page, limit, filters);
+  // }
+
   @Get()
   async getMeetings(
+    @Req() req,
     @Query('repName') repName?: string,
     @Query('month') month?: string,
     @Query('week') week?: number,
@@ -23,20 +51,15 @@ export class MeetingsController {
     const filters = {
       month,
       week: week !== undefined ? Number(week) : undefined,
+      repName,
     };
 
-    // Rep-specific view
-    if (repName) {
-      return this.meetingsService.getMeetingsByRep(
-        repName,
-        page,
-        limit,
-        filters,
-      );
-    }
-
-    // Default UI view (⚠️ MUST FILTER)
-    return this.meetingsService.getAllMeetings(page, limit, filters);
+    return this.meetingsService.getMeetingsForActor(
+      req.user,
+      page,
+      limit,
+      filters,
+    );
   }
 
   /**

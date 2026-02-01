@@ -105,6 +105,65 @@ export class MeetingsService {
     };
   }
 
+  //new function
+  async getMeetingsForActor(
+    actor: any,
+    page = 1,
+    limit = 20,
+    filters?: {
+      month?: string;
+      week?: number;
+      repName?: string;
+    },
+  ) {
+    console.log(actor);
+    const qb = this.meetingRepo
+      .createQueryBuilder('m')
+      .leftJoinAndSelect('m.user', 'user');
+
+    /* -------------------------
+       OWNERSHIP ENFORCEMENT
+    ------------------------- */
+    if (actor.type === 'USER') {
+      qb.andWhere(`(m."userId" = :userId OR m."repName" = :repName)`, {
+        userId: actor.id,
+        repName: `${actor.firstName} ${actor.lastName}`,
+      });
+    }
+
+    /* -------------------------
+       OPTIONAL FILTERS
+    ------------------------- */
+
+    // ✅ repName ONLY for admins
+    if (filters?.repName && actor.type === 'ADMIN') {
+      qb.andWhere('m.repName = :repName', { repName: filters.repName });
+    }
+
+    if (filters?.month) {
+      qb.andWhere('m.reportingMonth = :month', { month: filters.month });
+    }
+
+    if (filters?.week !== undefined) {
+      qb.andWhere('m.reportingWeek = :week', { week: filters.week });
+    }
+
+    qb.orderBy('m.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+
+    return {
+      success: true,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      items,
+    };
+  }
+
   /**
    * ✅ NON-PAGINATED VERSION (for KPI engine)
    * KPI logic must always operate on full datasets
