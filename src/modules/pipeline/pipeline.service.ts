@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
@@ -127,9 +128,9 @@ export class PipelineService {
         `
         EXISTS (
           SELECT 1
-          FROM pipeline_deals_pre_sales_owners_users ps
-          WHERE ps.pipelineDealId = deal.id
-          AND ps.usersId IN (:...preSalesOwnerIds)
+          FROM pipeline_deal_pre_sales ps
+          WHERE ps.deal_id = deal.id
+          AND ps.pre_sales_owner_id IN (:...preSalesOwnerIds)
         )
         `,
         { preSalesOwnerIds: filters.preSalesOwnerIds },
@@ -165,17 +166,31 @@ export class PipelineService {
     };
   }
 
-  async getAllDeals(filters: {
-    page: number;
-    limit: number;
-    year?: number;
-    quarter?: number;
-    stageId?: number;
-    salesOwnerId?: number;
-    customerId?: number;
-    preSalesOwnerIds?: number[];
-  }) {
+  async getAllDeals(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
+    filters: {
+      page: number;
+      limit: number;
+      year?: number;
+      quarter?: number;
+      stageId?: number;
+      salesOwnerId?: number;
+      customerId?: number;
+      preSalesOwnerIds?: number[];
+    },
+  ) {
+    if (filters.salesOwnerId && actor.type !== 'ADMIN') {
+      throw new ForbiddenException(
+        'You are not allowed to filter by sales owner',
+      );
+    }
     const { page, limit } = filters;
+
+    const enforcedFilters = { ...filters };
+
+    if (actor.type === 'USER') {
+      enforcedFilters.salesOwnerId = actor.id;
+    }
 
     /* ======================================================
      * 1️⃣ STAGE TOTALS (SAFE AGGREGATION)
@@ -207,7 +222,7 @@ export class PipelineService {
       ])
       .where('deal.status = :status', { status: 'ACTIVE' });
 
-    this.applyDealFiltersForAggregation(stageTotalsQb, filters);
+    this.applyDealFiltersForAggregation(stageTotalsQb, enforcedFilters);
 
     if (filters.stageId) {
       stageTotalsQb.andWhere(
@@ -247,7 +262,7 @@ export class PipelineService {
       .leftJoin('deal.stageManual', 'stageManual')
       .where('deal.status = :status', { status: 'ACTIVE' });
 
-    this.applyDealFiltersForAggregation(summaryQb, filters);
+    this.applyDealFiltersForAggregation(summaryQb, enforcedFilters);
 
     const summaryRaw = await summaryQb
       .select([
@@ -367,7 +382,7 @@ export class PipelineService {
       .where('deal.status = :status', { status: 'ACTIVE' })
       .distinct(true);
 
-    this.applyDealFilters(itemsQb, filters);
+    this.applyDealFilters(itemsQb, enforcedFilters);
 
     if (filters.stageId) {
       itemsQb.andWhere(`COALESCE(stageManual.id, stageExcel.id) = :stageId`, {
@@ -400,7 +415,37 @@ export class PipelineService {
     };
   }
 
-  async getByExternalDealId(externalDealId: string) {
+  // async getByExternalDealId(externalDealId: string) {
+  //   if (!externalDealId.startsWith('OPS360-')) {
+  //     throw new BadRequestException('Invalid deal reference');
+  //   }
+
+  //   const fullDeal = await this.dealRepo.findOne({
+  //     where: { externalDealId },
+  //     relations: [
+  //       'salesOwner',
+  //       'preSalesOwners',
+  //       'stageExcel',
+  //       'stageManual',
+  //       'customer',
+  //     ],
+  //   });
+
+  //   if (!fullDeal) {
+  //     throw new NotFoundException(`Deal not found: ${externalDealId}`);
+  //   }
+
+  //   return {
+  //     success: true,
+  //     message: 'Deals retrieved successfully.',
+  //     deal: this.normalizeDeal(fullDeal),
+  //   };
+  // }
+
+  async getByExternalDealId(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
+    externalDealId: string,
+  ) {
     if (!externalDealId.startsWith('OPS360-')) {
       throw new BadRequestException('Invalid deal reference');
     }
@@ -420,9 +465,14 @@ export class PipelineService {
       throw new NotFoundException(`Deal not found: ${externalDealId}`);
     }
 
+    // 🔒 OWNERSHIP CHECK
+    if (actor.type === 'USER' && fullDeal.salesOwnerId !== actor.id) {
+      throw new ForbiddenException('You do not have access to this deal');
+    }
+
     return {
       success: true,
-      message: 'Deals retrieved successfully.',
+      message: 'Deal retrieved successfully.',
       deal: this.normalizeDeal(fullDeal),
     };
   }
@@ -516,7 +566,11 @@ export class PipelineService {
      Update (UI)
   ------------------------------*/
 
-  async updateDeal(externalDealId: string, dto: UpdatePipelineDealDto) {
+  async updateDeal(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
+    externalDealId: string,
+    dto: UpdatePipelineDealDto,
+  ) {
     const deal = await this.dealRepo.findOne({
       where: { externalDealId },
       relations: ['preSalesOwners', 'customer'],
@@ -524,6 +578,11 @@ export class PipelineService {
 
     if (!deal) {
       throw new NotFoundException(`Deal not found: ${externalDealId}`);
+    }
+
+    // 🔒 OWNERSHIP CHECK
+    if (actor.type === 'USER' && deal.salesOwnerId !== actor.id) {
+      throw new ForbiddenException('You cannot update this deal');
     }
 
     /** -----------------------------
@@ -543,8 +602,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * STAGE (MANUAL OVERRIDE)
-   ------------------------------*/
+ * STAGE (MANUAL OVERRIDE)
+ ------------------------------*/
     if (dto.stageId !== undefined) {
       const stage = await this.dealStagesService.getById(dto.stageId);
       if (!stage) {
@@ -554,8 +613,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * OWNERSHIP
-   ------------------------------*/
+ * OWNERSHIP
+ ------------------------------*/
     if (dto.salesOwnerId !== undefined) {
       deal.salesOwnerId = dto.salesOwnerId;
     }
@@ -567,8 +626,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * EXPECTED CLOSE DATE
-   ------------------------------*/
+ * EXPECTED CLOSE DATE
+ ------------------------------*/
     if (dto.expectedCloseDate !== undefined) {
       const date = new Date(dto.expectedCloseDate);
       if (isNaN(date.getTime())) {
@@ -581,8 +640,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * MANUAL VALUE OVERRIDE
-   ------------------------------*/
+ * MANUAL VALUE OVERRIDE
+ ------------------------------*/
     if (dto.dealValue !== undefined) {
       deal.dealValueManual = dto.dealValue;
     }
@@ -596,13 +655,15 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * BASIC INFO
-   ------------------------------*/
+ * BASIC INFO
+ ------------------------------*/
     if (dto.dealName !== undefined) {
       deal.dealName = dto.dealName;
     }
 
     deal.source = 'UI';
+
+    // (customer, stage, ownership, values, etc…)
 
     await this.dealRepo.save(deal);
 
@@ -623,6 +684,114 @@ export class PipelineService {
       deal: this.normalizeDeal(fullDeal),
     };
   }
+
+  // async updateDeal(externalDealId: string, dto: UpdatePipelineDealDto) {
+  //   const deal = await this.dealRepo.findOne({
+  //     where: { externalDealId },
+  //     relations: ['preSalesOwners', 'customer'],
+  //   });
+
+  //   if (!deal) {
+  //     throw new NotFoundException(`Deal not found: ${externalDealId}`);
+  //   }
+
+  //   /** -----------------------------
+  //  * CUSTOMER CHANGE
+  //  ------------------------------*/
+  //   if (dto.customerId !== undefined) {
+  //     const customer = await this.customerRepo.findOneBy({
+  //       id: dto.customerId,
+  //     });
+
+  //     if (!customer) {
+  //       throw new BadRequestException('Invalid customer');
+  //     }
+
+  //     deal.customer = customer;
+  //     deal.organizationName = customer.name; // 🔑 sync
+  //   }
+
+  //   /** -----------------------------
+  //  * STAGE (MANUAL OVERRIDE)
+  //  ------------------------------*/
+  //   if (dto.stageId !== undefined) {
+  //     const stage = await this.dealStagesService.getById(dto.stageId);
+  //     if (!stage) {
+  //       throw new BadRequestException('Invalid stage');
+  //     }
+  //     deal.stageManualId = stage.id;
+  //   }
+
+  //   /** -----------------------------
+  //  * OWNERSHIP
+  //  ------------------------------*/
+  //   if (dto.salesOwnerId !== undefined) {
+  //     deal.salesOwnerId = dto.salesOwnerId;
+  //   }
+
+  //   if (dto.preSalesOwnerIds !== undefined) {
+  //     deal.preSalesOwners = dto.preSalesOwnerIds.length
+  //       ? await this.userRepo.findBy({ id: In(dto.preSalesOwnerIds) })
+  //       : [];
+  //   }
+
+  //   /** -----------------------------
+  //  * EXPECTED CLOSE DATE
+  //  ------------------------------*/
+  //   if (dto.expectedCloseDate !== undefined) {
+  //     const date = new Date(dto.expectedCloseDate);
+  //     if (isNaN(date.getTime())) {
+  //       throw new BadRequestException('Invalid expectedCloseDate');
+  //     }
+
+  //     deal.expectedCloseDate = date;
+  //     deal.year = date.getFullYear();
+  //     deal.quarter = Math.ceil((date.getMonth() + 1) / 3) as 1 | 2 | 3 | 4;
+  //   }
+
+  //   /** -----------------------------
+  //  * MANUAL VALUE OVERRIDE
+  //  ------------------------------*/
+  //   if (dto.dealValue !== undefined) {
+  //     deal.dealValueManual = dto.dealValue;
+  //   }
+
+  //   if (dto.nextAction !== undefined) {
+  //     deal.nextAction = dto.nextAction;
+  //   }
+
+  //   if (dto.redFlag !== undefined) {
+  //     deal.redFlag = dto.redFlag;
+  //   }
+
+  //   /** -----------------------------
+  //  * BASIC INFO
+  //  ------------------------------*/
+  //   if (dto.dealName !== undefined) {
+  //     deal.dealName = dto.dealName;
+  //   }
+
+  //   deal.source = 'UI';
+
+  //   await this.dealRepo.save(deal);
+
+  //   const fullDeal = await this.dealRepo.findOne({
+  //     where: { id: deal.id },
+  //     relations: [
+  //       'customer',
+  //       'salesOwner',
+  //       'preSalesOwners',
+  //       'stageExcel',
+  //       'stageManual',
+  //     ],
+  //   });
+
+  //   return {
+  //     success: true,
+  //     message: 'Deal updated successfully',
+  //     deal: this.normalizeDeal(fullDeal),
+  //   };
+  // }
 
   /* -----------------------------
      EXCEL UPSERT

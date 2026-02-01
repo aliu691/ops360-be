@@ -137,15 +137,6 @@ export class MeetingsService {
   ) {
     const qb = this.meetingRepo.createQueryBuilder('m');
 
-    /* -------------------------
-       OWNERSHIP ENFORCEMENT
-    ------------------------- */
-    if (actor.type === 'USER') {
-      // ❌ Users cannot arbitrarily request repName
-      throw new ForbiddenException('Not allowed');
-    }
-
-    // Admins only beyond this point
     qb.where('m.repName = :repName', { repName });
 
     if (filters?.month) {

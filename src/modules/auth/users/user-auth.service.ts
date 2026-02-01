@@ -34,6 +34,7 @@ export class UserAuthService {
       type: 'USER',
       department: user.department,
       email: user.email,
+      firstName: user.firstName,
     };
 
     return {

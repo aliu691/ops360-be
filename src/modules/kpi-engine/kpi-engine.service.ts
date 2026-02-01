@@ -15,14 +15,20 @@ export class KpiEngineService {
    * Supports optional filters: month, week, quarter
    */
   async evaluateLatestWeekForRep(
-    actor: any,
+    actor: {
+      type: 'ADMIN' | 'USER';
+      id: number;
+      repName?: string;
+    },
     repName: string,
     filters?: KpiFilters,
   ): Promise<WeeklyResult> {
+    /* ------------------------------------------------
+       🔐 ACCESS CONTROL
+    ------------------------------------------------ */
+
     if (actor.type === 'USER') {
-      // users can ONLY see their own KPI
-      const actorRepName =
-        actor.repName ?? `${actor.firstName} ${actor.lastName}`;
+      const actorRepName = `${actor.repName}`;
 
       if (actorRepName !== repName) {
         throw new ForbiddenException(
@@ -30,11 +36,10 @@ export class KpiEngineService {
         );
       }
     }
-    /**
-     * ✅ IMPORTANT:
-     * KPI MUST evaluate against ALL meetings,
-     * never paginated data
-     */
+
+    /* ------------------------------------------------
+       DATA FETCH
+    ------------------------------------------------ */
 
     const allMeetings = await this.meetingsService.getAllMeetingsByRep(
       actor,
@@ -45,16 +50,15 @@ export class KpiEngineService {
       },
     );
 
-    if (!allMeetings || allMeetings.length === 0) {
+    if (!allMeetings.length) {
       return this.emptyResult('No meetings found for this rep.');
     }
 
     let scopedMeetings = allMeetings;
 
-    /* ------------------------------
-       QUARTER FILTER (YYYY-QN)
-       (Month & week already handled by DB)
-    ------------------------------ */
+    /* ------------------------------------------------
+       QUARTER FILTER
+    ------------------------------------------------ */
     if (filters?.quarter) {
       const [yearStr, qStr] = filters.quarter.split('-Q');
       const year = Number(yearStr);
@@ -72,10 +76,9 @@ export class KpiEngineService {
       return this.emptyResult('No meetings found for selected period.');
     }
 
-    /**
-     * ✅ Existing behavior preserved:
-     * Evaluate latest batch (latest week in scope)
-     */
+    /* ------------------------------------------------
+       KPI EVALUATION
+    ------------------------------------------------ */
     const latestBatch = BatchPicker.pickLatestBatch(
       scopedMeetings as MeetingRow[],
     );
@@ -90,6 +93,10 @@ export class KpiEngineService {
       ...weekly,
       meetingFindings,
     };
+
+    // ✅ TypeScript safety — logically unreachable
+    // but required for static analysis
+    return this.emptyResult('No KPI data available.');
   }
 
   /* --------------------------------
