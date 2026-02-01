@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { MeetingsService } from '../meetings/meetings.service';
 import { MeetingEvaluator } from './evaluators/meeting-evaluator';
 import { WeeklyEvaluator } from './evaluators/weekly-evaluator';
@@ -15,15 +15,29 @@ export class KpiEngineService {
    * Supports optional filters: month, week, quarter
    */
   async evaluateLatestWeekForRep(
+    actor: any,
     repName: string,
     filters?: KpiFilters,
   ): Promise<WeeklyResult> {
+    if (actor.type === 'USER') {
+      // users can ONLY see their own KPI
+      const actorRepName =
+        actor.repName ?? `${actor.firstName} ${actor.lastName}`;
+
+      if (actorRepName !== repName) {
+        throw new ForbiddenException(
+          'You are not allowed to view KPI data for other reps',
+        );
+      }
+    }
     /**
      * ✅ IMPORTANT:
      * KPI MUST evaluate against ALL meetings,
      * never paginated data
      */
+
     const allMeetings = await this.meetingsService.getAllMeetingsByRep(
+      actor,
       repName,
       {
         month: filters?.month,
