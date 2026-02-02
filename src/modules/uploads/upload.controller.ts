@@ -5,6 +5,8 @@ import {
   UploadedFile,
   Query,
   BadRequestException,
+  Req,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from '../users/users.service';
@@ -21,6 +23,7 @@ export class UploadController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadMeetings(
     @UploadedFile() file: Express.Multer.File,
+    @Req() req,
     @Query('repName') repName: string,
     @Query('month') month: string, // YYYY-MM
     @Query('week') week?: string, // number as string from query
@@ -42,8 +45,8 @@ export class UploadController {
       throw new BadRequestException('reporting week is required');
     }
 
-    const weekNumber = Number(week);
-    if (Number.isNaN(weekNumber)) {
+    const reportingWeek = Number(week);
+    if (Number.isNaN(reportingWeek)) {
       throw new BadRequestException('week must be a valid number');
     }
 
@@ -57,11 +60,21 @@ export class UploadController {
       throw new BadRequestException(`User '${repName}' not found`);
     }
 
-    const result = await this.uploadService.processMeetingsFile(file.path, {
+    /* ============================
+     🔒 OWNERSHIP (EXTRA SAFETY)
+  ============================ */
+    if (req.user.type === 'USER' && req.user.id !== user.id) {
+      throw new ForbiddenException(
+        'You cannot upload meetings for another user',
+      );
+    }
+
+    const result = await this.uploadService.processMeetingsFile(file, {
       repName,
       reportingMonth: month,
-      reportingWeek: weekNumber,
-      userId: user.id,
+      reportingWeek,
+      userId: req.user.id,
+      actorType: req.user.type,
     });
 
     return {
@@ -71,7 +84,7 @@ export class UploadController {
       reporting: {
         repName,
         month,
-        week: weekNumber,
+        week: reportingWeek,
       },
     };
   }

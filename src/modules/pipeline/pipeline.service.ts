@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
@@ -127,9 +128,9 @@ export class PipelineService {
         `
         EXISTS (
           SELECT 1
-          FROM pipeline_deals_pre_sales_owners_users ps
-          WHERE ps.pipelineDealId = deal.id
-          AND ps.usersId IN (:...preSalesOwnerIds)
+          FROM pipeline_deal_pre_sales ps
+          WHERE ps.deal_id = deal.id
+          AND ps.pre_sales_owner_id IN (:...preSalesOwnerIds)
         )
         `,
         { preSalesOwnerIds: filters.preSalesOwnerIds },
@@ -165,313 +166,31 @@ export class PipelineService {
     };
   }
 
-  //   private async resolveYearlyTarget({
-  //     salesOwnerId,
-  //     preSalesOwnerIds,
-  //   }: {
-  //     salesOwnerId?: number;
-  //     preSalesOwnerIds?: number[];
-  //   }): Promise<number> {
-  //     // 🎯 Case 1: single sales owner
-  //     if (salesOwnerId) {
-  //       const salesUser = await this.userRepo.findOne({
-  //         where: { id: salesOwnerId },
-  //         select: ['yearlyTarget'],
-  //       });
-
-  //       if (salesUser?.yearlyTarget) {
-  //         return salesUser.yearlyTarget;
-  //       }
-  //     }
-
-  //     // 🎯 Case 2: single pre-sales owner
-  //     if (preSalesOwnerIds?.length === 1) {
-  //       const preSalesUser = await this.userRepo.findOne({
-  //         where: { id: preSalesOwnerIds[0] },
-  //         select: ['yearlyTarget'],
-  //       });
-
-  //       if (preSalesUser?.yearlyTarget) {
-  //         return preSalesUser.yearlyTarget;
-  //       }
-  //     }
-
-  //     // 🎯 Case 3: company-wide default
-  //     return PIPELINE_CONFIG.COMPANY_YEARLY_TARGET;
-  //   }
-
-  /* -----------------------------
-     READ
-  ------------------------------*/
-
-  //   async getAllDeals(filters: {
-  //     page: number;
-  //     limit: number;
-  //     year?: number;
-  //     quarter?: number;
-  //     stageId?: number;
-  //     salesOwnerId?: number;
-  //     customerId?: number;
-  //     preSalesOwnerIds?: number[];
-  //   }) {
-  //     const { page, limit, salesOwnerId, customerId } = filters;
-
-  //     /* ======================================================
-  //      * BASE QUERY (shared filters)
-  //      * ====================================================== */
-  //     const baseQb = this.dealRepo
-  //       .createQueryBuilder('deal')
-  //       .leftJoin('deal.stageExcel', 'stageExcel')
-  //       .leftJoin('deal.stageManual', 'stageManual')
-  //       .leftJoin('deal.preSalesOwners', 'preSalesOwners');
-
-  //     this.applyDealFilters(baseQb, filters);
-
-  //     // ✅ IMPORTANT: stage filter must use EFFECTIVE stage
-  //     if (filters.stageId) {
-  //       baseQb.andWhere(`COALESCE(stageManual.id, stageExcel.id) = :stageId`, {
-  //         stageId: filters.stageId,
-  //       });
-  //     }
-
-  //     /* ======================================================
-  //      * 1️⃣ STAGE TOTALS (FUNNEL)
-  //      * ====================================================== */
-  //     const stageTotalsRaw = await baseQb
-  //       .clone()
-  //       .select([
-  //         `COALESCE(stageManual.id, stageExcel.id) AS "stageId"`,
-  //         `COALESCE(stageManual.key, stageExcel.key) AS "stageKey"`,
-  //         `COALESCE(stageManual.name, stageExcel.name) AS "stageName"`,
-  //         `COALESCE(stageManual.probability, stageExcel.probability) AS "probability"`,
-
-  //         `COUNT(DISTINCT deal.id)::int AS "count"`,
-
-  //         `
-  //         SUM(
-  //           COALESCE(deal.dealValueManual, deal.dealValueExcel)
-  //         )::float AS "amount"
-  //         `,
-
-  //         `
-  //         SUM(
-  //           COALESCE(deal.dealValueManual, deal.dealValueExcel)
-  //           * (COALESCE(stageManual.probability, stageExcel.probability) / 100.0)
-  //         )::float AS "weightedAmount"
-  //         `,
-  //       ])
-  //       .groupBy(`COALESCE(stageManual.id, stageExcel.id)`)
-  //       .addGroupBy(`COALESCE(stageManual.key, stageExcel.key)`)
-  //       .addGroupBy(`COALESCE(stageManual.name, stageExcel.name)`)
-  //       .addGroupBy(`COALESCE(stageManual.probability, stageExcel.probability)`)
-  //       .getRawMany();
-
-  //     const stageTotals = stageTotalsRaw.reduce(
-  //       (acc, row) => {
-  //         acc[row.stageKey] = {
-  //           stageId: Number(row.stageId),
-  //           stageName: row.stageName,
-  //           probability: Number(row.probability),
-  //           count: Number(row.count),
-  //           amount: Number(row.amount),
-  //           weightedAmount: Number(row.weightedAmount),
-  //         };
-  //         return acc;
-  //       },
-  //       {} as Record<string, any>,
-  //     );
-
-  //     /* ======================================================
-  //      * 2️⃣ SUMMARY
-  //      * ====================================================== */
-  //     const summaryRaw = await baseQb
-  //       .clone()
-  //       .select([
-  //         // ✅ TOTAL DEALS
-  //         `COUNT(DISTINCT deal.id)::int AS "totalDeals"`,
-
-  //         // ✅ TOTAL PIPELINE
-  //         `
-  //     SUM(
-  //       DISTINCT COALESCE(deal.dealValueManual, deal.dealValueExcel)
-  //     )::float AS "totalPipelineAmount"
-  //     `,
-
-  //         // ✅ CLOSED WON AMOUNT (DISTINCT DEALS ONLY)
-  //         `
-  //     SUM(
-  //       DISTINCT CASE
-  //         WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
-  //         THEN COALESCE(deal.dealValueManual, deal.dealValueExcel)
-  //         ELSE NULL
-  //       END
-  //     )::float AS "closedWonAmount"
-  //     `,
-
-  //         // ✅ CLOSED WON COUNT (DISTINCT DEALS ONLY)
-  //         `
-  //     COUNT(
-  //       DISTINCT CASE
-  //         WHEN COALESCE(stageManual.key, stageExcel.key) = 'CLOSE_WON'
-  //         THEN deal.id
-  //       END
-  //     )::int AS "closedWonCount"
-  //     `,
-
-  //         // ✅ WEIGHTED FORECAST (DISTINCT DEALS)
-  //         `
-  //     SUM(
-  //       DISTINCT
-  //       COALESCE(deal.dealValueManual, deal.dealValueExcel)
-  //       * (COALESCE(stageManual.probability, stageExcel.probability) / 100.0)
-  //     )::float AS "weightedForecast"
-  //     `,
-  //       ])
-  //       .getRawOne();
-
-  //     const totalDeals = Number(summaryRaw.totalDeals);
-  //     const totalPipelineAmount = Number(summaryRaw.totalPipelineAmount);
-  //     const closedWonAmount = Number(summaryRaw.closedWonAmount);
-  //     const closedWonCount = Number(summaryRaw.closedWonCount);
-  //     const weightedForecast = Number(summaryRaw.weightedForecast);
-
-  //     const avgDealSize =
-  //       totalDeals > 0 ? Math.round(totalPipelineAmount / totalDeals) : 0;
-
-  //     /* ======================================================
-  //      * 🎯 TARGET RESOLUTION (SALES > PRE-SALES > COMPANY)
-  //      * ====================================================== */
-
-  //     // 1️⃣ Company default (fallback)
-  //     const companyYearlyTarget =
-  //       Number(PIPELINE_CONFIG.COMPANY_YEARLY_TARGET) || 0;
-
-  //     let yearlyTarget: number | null = companyYearlyTarget;
-  //     let quarterlyTarget: number | null =
-  //       companyYearlyTarget > 0 ? Math.round(companyYearlyTarget / 4) : null;
-
-  //     /**
-  //      * RULE 1:
-  //      * If salesOwnerId exists → ALWAYS use sales owner target
-  //      */
-  //     if (filters.salesOwnerId) {
-  //       const salesOwner = await this.userRepo.findOne({
-  //         where: { id: filters.salesOwnerId },
-  //         select: ['yearlyTarget'],
-  //       });
-
-  //       if (salesOwner?.yearlyTarget) {
-  //         yearlyTarget = salesOwner.yearlyTarget;
-  //         quarterlyTarget = Math.round(salesOwner.yearlyTarget / 4);
-  //       }
-  //     } else if (filters.preSalesOwnerIds?.length) {
-  //       /**
-  //        * RULE 2:
-  //        * Only pre-sales owners (no sales owner)
-  //        */
-  //       const preSalesOwners = await this.userRepo.find({
-  //         where: { id: In(filters.preSalesOwnerIds) },
-  //         select: ['yearlyTarget'],
-  //       });
-
-  //       const summedPreSalesTarget = preSalesOwners.reduce(
-  //         (sum, user) => sum + (user.yearlyTarget || 0),
-  //         0,
-  //       );
-
-  //       if (summedPreSalesTarget > 0) {
-  //         yearlyTarget = summedPreSalesTarget;
-  //         quarterlyTarget = Math.round(summedPreSalesTarget / 4);
-  //       }
-  //     }
-
-  //     // 3️⃣ Percent to target (final resolved target)
-  //     const percentToTarget =
-  //       yearlyTarget && yearlyTarget > 0
-  //         ? Math.round((closedWonAmount / yearlyTarget) * 100)
-  //         : null;
-
-  //     const summary = {
-  //       year: filters.year,
-  //       quarter: filters.quarter,
-  //       totalDeals,
-  //       totalPipelineAmount,
-  //       closedWon: {
-  //         count: closedWonCount,
-  //         amount: closedWonAmount,
-  //       },
-  //       yearlyTarget,
-  //       quarterlyTarget,
-  //       percentToTarget,
-  //       avgDealSize,
-  //       weightedForecast,
-  //     };
-
-  //     /* ======================================================
-  //      * 3️⃣ PAGINATED ITEMS (MODAL)
-  //      * ====================================================== */
-  //     const itemsQb = this.dealRepo
-  //       .createQueryBuilder('deal')
-  //       .leftJoinAndSelect('deal.salesOwner', 'salesOwner')
-  //       .leftJoinAndSelect('deal.preSalesOwners', 'preSalesOwners')
-  //       .leftJoinAndSelect('deal.stageExcel', 'stageExcel')
-  //       .leftJoinAndSelect('deal.stageManual', 'stageManual')
-  //       .leftJoinAndSelect('deal.customer', 'customer')
-  //       .distinct(true);
-
-  //     this.applyDealFilters(itemsQb, filters);
-
-  //     if (filters.stageId) {
-  //       itemsQb.andWhere(`COALESCE(stageManual.id, stageExcel.id) = :stageId`, {
-  //         stageId: filters.stageId,
-  //       });
-  //     }
-
-  //     itemsQb
-  //       .orderBy('deal.updatedAt', 'DESC')
-  //       .skip((page - 1) * limit)
-  //       .take(limit);
-
-  //     const [items, total] = await itemsQb.getManyAndCount();
-  //     const totalPages = Math.ceil(total / limit);
-
-  //     const normalizedItems = items.map((deal) => {
-  //       const effectiveStage = deal.stageManual ?? deal.stageExcel;
-  //       const effectiveValue = deal.dealValueManual ?? deal.dealValueExcel;
-
-  //       return {
-  //         ...deal,
-  //         displayValue: Number(effectiveValue),
-  //         displayStage: effectiveStage,
-  //       };
-  //     });
-
-  //     /* ======================================================
-  //      * FINAL RESPONSE
-  //      * ====================================================== */
-  //     return {
-  //       success: true,
-  //       page,
-  //       limit,
-  //       total,
-  //       totalPages,
-  //       summary,
-  //       stageTotals,
-  //       items: normalizedItems,
-  //     };
-  //   }
-
-  async getAllDeals(filters: {
-    page: number;
-    limit: number;
-    year?: number;
-    quarter?: number;
-    stageId?: number;
-    salesOwnerId?: number;
-    customerId?: number;
-    preSalesOwnerIds?: number[];
-  }) {
+  async getAllDeals(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
+    filters: {
+      page: number;
+      limit: number;
+      year?: number;
+      quarter?: number;
+      stageId?: number;
+      salesOwnerId?: number;
+      customerId?: number;
+      preSalesOwnerIds?: number[];
+    },
+  ) {
+    if (filters.salesOwnerId && actor.type !== 'ADMIN') {
+      throw new ForbiddenException(
+        'You are not allowed to filter by sales owner',
+      );
+    }
     const { page, limit } = filters;
+
+    const enforcedFilters = { ...filters };
+
+    if (actor.type === 'USER') {
+      enforcedFilters.salesOwnerId = actor.id;
+    }
 
     /* ======================================================
      * 1️⃣ STAGE TOTALS (SAFE AGGREGATION)
@@ -503,7 +222,7 @@ export class PipelineService {
       ])
       .where('deal.status = :status', { status: 'ACTIVE' });
 
-    this.applyDealFiltersForAggregation(stageTotalsQb, filters);
+    this.applyDealFiltersForAggregation(stageTotalsQb, enforcedFilters);
 
     if (filters.stageId) {
       stageTotalsQb.andWhere(
@@ -543,7 +262,7 @@ export class PipelineService {
       .leftJoin('deal.stageManual', 'stageManual')
       .where('deal.status = :status', { status: 'ACTIVE' });
 
-    this.applyDealFiltersForAggregation(summaryQb, filters);
+    this.applyDealFiltersForAggregation(summaryQb, enforcedFilters);
 
     const summaryRaw = await summaryQb
       .select([
@@ -592,8 +311,11 @@ export class PipelineService {
     const avgDealSize =
       totalDeals > 0 ? Math.round(totalPipelineAmount / totalDeals) : 0;
 
+    const effectiveSalesOwnerId =
+      actor.type === 'USER' ? actor.id : filters.salesOwnerId;
+
     /* ======================================================
-     * 🎯 TARGET RESOLUTION (RESTORED)
+     * 🎯 TARGET RESOLUTION (FIXED)
      * ====================================================== */
     const companyYearlyTarget =
       Number(PIPELINE_CONFIG.COMPANY_YEARLY_TARGET) || 0;
@@ -602,7 +324,24 @@ export class PipelineService {
     let quarterlyTarget: number | null =
       companyYearlyTarget > 0 ? Math.round(companyYearlyTarget / 4) : null;
 
-    if (filters.salesOwnerId) {
+    /**
+     * 🔐 USER:
+     * Always use logged-in user's target
+     */
+    if (actor.type === 'USER') {
+      const user = await this.userRepo.findOne({
+        where: { id: actor.id },
+        select: ['yearlyTarget'],
+      });
+
+      if (user?.yearlyTarget) {
+        yearlyTarget = user.yearlyTarget;
+        quarterlyTarget = Math.round(user.yearlyTarget / 4);
+      }
+    } else if (filters.salesOwnerId) {
+      /**
+       * 👮 ADMIN filtered by Sales Rep
+       */
       const salesOwner = await this.userRepo.findOne({
         where: { id: filters.salesOwnerId },
         select: ['yearlyTarget'],
@@ -613,6 +352,9 @@ export class PipelineService {
         quarterlyTarget = Math.round(salesOwner.yearlyTarget / 4);
       }
     } else if (filters.preSalesOwnerIds?.length) {
+      /**
+       * 🤝 ADMIN filtered by Pre-Sales
+       */
       const preSalesOwners = await this.userRepo.find({
         where: { id: In(filters.preSalesOwnerIds) },
         select: ['yearlyTarget'],
@@ -629,6 +371,9 @@ export class PipelineService {
       }
     }
 
+    /* ======================================================
+     * 📊 PERCENT TO TARGET
+     * ====================================================== */
     const percentToTarget =
       yearlyTarget && yearlyTarget > 0
         ? Math.round((closedWonAmount / yearlyTarget) * 100)
@@ -663,7 +408,7 @@ export class PipelineService {
       .where('deal.status = :status', { status: 'ACTIVE' })
       .distinct(true);
 
-    this.applyDealFilters(itemsQb, filters);
+    this.applyDealFilters(itemsQb, enforcedFilters);
 
     if (filters.stageId) {
       itemsQb.andWhere(`COALESCE(stageManual.id, stageExcel.id) = :stageId`, {
@@ -696,7 +441,10 @@ export class PipelineService {
     };
   }
 
-  async getByExternalDealId(externalDealId: string) {
+  async getByExternalDealId(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
+    externalDealId: string,
+  ) {
     if (!externalDealId.startsWith('OPS360-')) {
       throw new BadRequestException('Invalid deal reference');
     }
@@ -716,9 +464,14 @@ export class PipelineService {
       throw new NotFoundException(`Deal not found: ${externalDealId}`);
     }
 
+    // 🔒 OWNERSHIP CHECK
+    if (actor.type === 'USER' && fullDeal.salesOwnerId !== actor.id) {
+      throw new ForbiddenException('You do not have access to this deal');
+    }
+
     return {
       success: true,
-      message: 'Deals retrieved successfully.',
+      message: 'Deal retrieved successfully.',
       deal: this.normalizeDeal(fullDeal),
     };
   }
@@ -727,15 +480,13 @@ export class PipelineService {
      CREATE (UI)
   ------------------------------*/
 
-  async createManualDeal(dto: CreatePipelineDealDto) {
+  async createManualDeal(dto: CreatePipelineDealDto, salesOwnerId: number) {
     const stage = await this.dealStagesService.getById(dto.stageId);
     if (!stage) {
       throw new BadRequestException('Invalid deal stage');
     }
 
-    const salesOwner = await this.userRepo.findOneBy({
-      id: dto.salesOwnerId,
-    });
+    const salesOwner = await this.userRepo.findOneBy({ id: salesOwnerId });
     if (!salesOwner) {
       throw new BadRequestException('Invalid sales owner');
     }
@@ -760,31 +511,22 @@ export class PipelineService {
 
     const deal = this.dealRepo.create() as PipelineDeal;
 
-    /** -----------------------------
-     * CORE FIELDS
-     ------------------------------*/
+    /** CORE FIELDS */
     deal.customer = customer;
-    deal.organizationName = customer.name; // 🔑 derived
+    deal.organizationName = customer.name;
     deal.dealName = dto.dealName;
-
     deal.dealValueExcel = dto.dealValue;
     deal.stageExcelId = stage.id;
-
     deal.salesOwnerId = salesOwner.id;
     deal.preSalesOwners = preSalesOwners;
-
     deal.expectedCloseDate = closeDate;
     deal.nextAction = dto.nextAction ?? undefined;
     deal.redFlag = dto.redFlag ?? undefined;
-
     deal.year = year;
     deal.quarter = quarter;
     deal.source = 'UI';
     deal.status = 'ACTIVE';
 
-    /** -----------------------------
-     * SAVE & GENERATE EXTERNAL ID
-     ------------------------------*/
     const saved = await this.dealRepo.save(deal);
 
     saved.externalDealId = `OPS360-${String(saved.id).padStart(6, '0')}`;
@@ -812,7 +554,11 @@ export class PipelineService {
      Update (UI)
   ------------------------------*/
 
-  async updateDeal(externalDealId: string, dto: UpdatePipelineDealDto) {
+  async updateDeal(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
+    externalDealId: string,
+    dto: UpdatePipelineDealDto,
+  ) {
     const deal = await this.dealRepo.findOne({
       where: { externalDealId },
       relations: ['preSalesOwners', 'customer'],
@@ -820,6 +566,11 @@ export class PipelineService {
 
     if (!deal) {
       throw new NotFoundException(`Deal not found: ${externalDealId}`);
+    }
+
+    // 🔒 OWNERSHIP CHECK
+    if (actor.type === 'USER' && deal.salesOwnerId !== actor.id) {
+      throw new ForbiddenException('You cannot update this deal');
     }
 
     /** -----------------------------
@@ -839,8 +590,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * STAGE (MANUAL OVERRIDE)
-   ------------------------------*/
+ * STAGE (MANUAL OVERRIDE)
+ ------------------------------*/
     if (dto.stageId !== undefined) {
       const stage = await this.dealStagesService.getById(dto.stageId);
       if (!stage) {
@@ -850,8 +601,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * OWNERSHIP
-   ------------------------------*/
+ * OWNERSHIP
+ ------------------------------*/
     if (dto.salesOwnerId !== undefined) {
       deal.salesOwnerId = dto.salesOwnerId;
     }
@@ -863,8 +614,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * EXPECTED CLOSE DATE
-   ------------------------------*/
+ * EXPECTED CLOSE DATE
+ ------------------------------*/
     if (dto.expectedCloseDate !== undefined) {
       const date = new Date(dto.expectedCloseDate);
       if (isNaN(date.getTime())) {
@@ -877,8 +628,8 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * MANUAL VALUE OVERRIDE
-   ------------------------------*/
+ * MANUAL VALUE OVERRIDE
+ ------------------------------*/
     if (dto.dealValue !== undefined) {
       deal.dealValueManual = dto.dealValue;
     }
@@ -892,13 +643,15 @@ export class PipelineService {
     }
 
     /** -----------------------------
-   * BASIC INFO
-   ------------------------------*/
+ * BASIC INFO
+ ------------------------------*/
     if (dto.dealName !== undefined) {
       deal.dealName = dto.dealName;
     }
 
     deal.source = 'UI';
+
+    // (customer, stage, ownership, values, etc…)
 
     await this.dealRepo.save(deal);
 
@@ -919,6 +672,114 @@ export class PipelineService {
       deal: this.normalizeDeal(fullDeal),
     };
   }
+
+  // async updateDeal(externalDealId: string, dto: UpdatePipelineDealDto) {
+  //   const deal = await this.dealRepo.findOne({
+  //     where: { externalDealId },
+  //     relations: ['preSalesOwners', 'customer'],
+  //   });
+
+  //   if (!deal) {
+  //     throw new NotFoundException(`Deal not found: ${externalDealId}`);
+  //   }
+
+  //   /** -----------------------------
+  //  * CUSTOMER CHANGE
+  //  ------------------------------*/
+  //   if (dto.customerId !== undefined) {
+  //     const customer = await this.customerRepo.findOneBy({
+  //       id: dto.customerId,
+  //     });
+
+  //     if (!customer) {
+  //       throw new BadRequestException('Invalid customer');
+  //     }
+
+  //     deal.customer = customer;
+  //     deal.organizationName = customer.name; // 🔑 sync
+  //   }
+
+  //   /** -----------------------------
+  //  * STAGE (MANUAL OVERRIDE)
+  //  ------------------------------*/
+  //   if (dto.stageId !== undefined) {
+  //     const stage = await this.dealStagesService.getById(dto.stageId);
+  //     if (!stage) {
+  //       throw new BadRequestException('Invalid stage');
+  //     }
+  //     deal.stageManualId = stage.id;
+  //   }
+
+  //   /** -----------------------------
+  //  * OWNERSHIP
+  //  ------------------------------*/
+  //   if (dto.salesOwnerId !== undefined) {
+  //     deal.salesOwnerId = dto.salesOwnerId;
+  //   }
+
+  //   if (dto.preSalesOwnerIds !== undefined) {
+  //     deal.preSalesOwners = dto.preSalesOwnerIds.length
+  //       ? await this.userRepo.findBy({ id: In(dto.preSalesOwnerIds) })
+  //       : [];
+  //   }
+
+  //   /** -----------------------------
+  //  * EXPECTED CLOSE DATE
+  //  ------------------------------*/
+  //   if (dto.expectedCloseDate !== undefined) {
+  //     const date = new Date(dto.expectedCloseDate);
+  //     if (isNaN(date.getTime())) {
+  //       throw new BadRequestException('Invalid expectedCloseDate');
+  //     }
+
+  //     deal.expectedCloseDate = date;
+  //     deal.year = date.getFullYear();
+  //     deal.quarter = Math.ceil((date.getMonth() + 1) / 3) as 1 | 2 | 3 | 4;
+  //   }
+
+  //   /** -----------------------------
+  //  * MANUAL VALUE OVERRIDE
+  //  ------------------------------*/
+  //   if (dto.dealValue !== undefined) {
+  //     deal.dealValueManual = dto.dealValue;
+  //   }
+
+  //   if (dto.nextAction !== undefined) {
+  //     deal.nextAction = dto.nextAction;
+  //   }
+
+  //   if (dto.redFlag !== undefined) {
+  //     deal.redFlag = dto.redFlag;
+  //   }
+
+  //   /** -----------------------------
+  //  * BASIC INFO
+  //  ------------------------------*/
+  //   if (dto.dealName !== undefined) {
+  //     deal.dealName = dto.dealName;
+  //   }
+
+  //   deal.source = 'UI';
+
+  //   await this.dealRepo.save(deal);
+
+  //   const fullDeal = await this.dealRepo.findOne({
+  //     where: { id: deal.id },
+  //     relations: [
+  //       'customer',
+  //       'salesOwner',
+  //       'preSalesOwners',
+  //       'stageExcel',
+  //       'stageManual',
+  //     ],
+  //   });
+
+  //   return {
+  //     success: true,
+  //     message: 'Deal updated successfully',
+  //     deal: this.normalizeDeal(fullDeal),
+  //   };
+  // }
 
   /* -----------------------------
      EXCEL UPSERT

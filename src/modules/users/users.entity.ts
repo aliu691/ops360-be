@@ -17,8 +17,12 @@ export class User {
   @Column()
   lastName: string;
 
-  @Column()
+  @Column({ unique: true })
   email: string;
+
+  /** 🔐 AUTH (NEW) */
+  @Column({ type: 'text', nullable: true })
+  passwordHash: string | null;
 
   @Column({ type: 'text' })
   department: string;
@@ -26,9 +30,14 @@ export class User {
   @Column({ type: 'int', default: 0 })
   yearlyTarget: number;
 
-  @Column({ type: 'text', default: 'USER' })
-  authRole: 'USER';
-
+  /** ✅ UNCHANGED */
   @Column({ type: 'text', default: 'ACTIVE' })
   status: 'ACTIVE' | 'INACTIVE';
+
+  /** 🕒 AUDIT */
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

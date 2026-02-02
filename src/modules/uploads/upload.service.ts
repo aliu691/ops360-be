@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
@@ -21,35 +26,68 @@ export class UploadService {
   ) {}
 
   async processMeetingsFile(
-    filePath: string,
+    file: Express.Multer.File,
     context: {
       repName: string;
       reportingMonth: string; // YYYY-MM
       reportingWeek: number;
       userId: number;
+      actorType: 'USER' | 'ADMIN';
     },
   ) {
-    const { repName, reportingMonth, reportingWeek } = context;
+    const { repName, reportingMonth, reportingWeek, userId, actorType } =
+      context;
 
+    /* ============================
+     VALIDATION
+  ============================ */
     if (!repName || !reportingMonth || reportingWeek === undefined) {
       throw new BadRequestException(
         'repName, reportingMonth and reportingWeek are required',
       );
     }
 
-    const workbook = XLSX.readFile(filePath);
+    if (!file || !file.buffer) {
+      throw new BadRequestException('Uploaded file is missing or invalid');
+    }
+
+    /* ============================
+     🔒 OWNERSHIP ENFORCEMENT
+     USER can only upload their own data
+  ============================ */
+    if (actorType === 'USER') {
+      const user = await this.userRepo.findOne({
+        where: { id: userId },
+        select: ['firstName'],
+      });
+
+      if (!user || user.firstName !== repName) {
+        throw new ForbiddenException(
+          'You are not allowed to upload meetings for another rep',
+        );
+      }
+    }
+
+    /* ============================
+     READ EXCEL (BUFFER-BASED)
+  ============================ */
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
+
+    if (!sheetName) {
+      throw new BadRequestException('Excel file contains no sheets');
+    }
+
     const sheet = workbook.Sheets[sheetName];
-
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
-
-    console.log('DEBUG ROWS (first 5):', rows.slice(0, 5));
 
     if (rows.length < 2) {
       return { totalRows: 0 };
     }
 
-    // Header row
+    /* ============================
+     HEADER MAPPING
+  ============================ */
     const headerRow = rows[0] as Record<string, any>;
     const columnMap: Record<string, string> = {};
 
@@ -62,9 +100,6 @@ export class UploadService {
       if (value === 'OUTCOME') columnMap.meetingOutcome = key;
     }
 
-    console.log('COLUMN MAP:', columnMap);
-
-    // Validate required columns
     if (
       !columnMap.customerName ||
       !columnMap.primaryContact ||
@@ -76,8 +111,11 @@ export class UploadService {
       );
     }
 
+    /* ============================
+     TRANSFORM ROWS
+  ============================ */
     const meetings = rows.slice(1).map((row: any) => ({
-      userId: context.userId,
+      userId,
       repName,
       reportingMonth,
       reportingWeek,
@@ -95,7 +133,9 @@ export class UploadService {
       return { totalRows: 0 };
     }
 
-    // 🚨 THIS CALL IS WHERE TIMEOUT HAPPENS IF IMPLEMENTED WRONG
+    /* ============================
+     SAVE (BULK)
+  ============================ */
     await this.meetingsService.saveMeetings(filteredMeetings);
 
     return {

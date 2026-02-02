@@ -10,7 +10,6 @@ import { CalendarModule } from './modules/calendar/calendar.module';
 import { UsersModule } from './modules/users/users.module';
 import { AdminsModule } from './modules/admins/admins.module';
 import { APP_GUARD } from '@nestjs/core';
-import { AdminAuthGuard } from './utils/admin-auth.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { RolesGuard } from './utils/guards.roles';
 import { EmailModule } from './modules/email/email.modules';
@@ -18,12 +17,14 @@ import { DepartmentsModule } from './modules/departments/departments.module';
 import { PipelineModule } from './modules/pipeline/pipeline.module';
 import { DealStagesModule } from './modules/deal-stages/deal-stages.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { UserAuthModule } from './modules/auth/users/user-auth.module';
+import { JwtAuthGuard } from './utils/jwt-auth.guard';
 
 @Module({
   providers: [
     {
       provide: APP_GUARD,
-      useClass: AdminAuthGuard,
+      useClass: JwtAuthGuard,
     },
     {
       provide: APP_GUARD,
@@ -71,6 +72,7 @@ import { CustomersModule } from './modules/customers/customers.module';
     PipelineModule,
     DealStagesModule,
     CustomersModule,
+    UserAuthModule,
   ],
 })
 export class AppModule {}
