@@ -32,10 +32,6 @@ export class AuthService {
 
     const token = this.jwtService.sign(payload);
 
-    console.log('🟡 ADMIN JWT:', token);
-
-    console.log('🟡 ADMIN JWT DECODED:', this.jwtService.decode(token));
-
     return {
       accessToken: token,
       admin: {

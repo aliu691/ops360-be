@@ -311,8 +311,11 @@ export class PipelineService {
     const avgDealSize =
       totalDeals > 0 ? Math.round(totalPipelineAmount / totalDeals) : 0;
 
+    const effectiveSalesOwnerId =
+      actor.type === 'USER' ? actor.id : filters.salesOwnerId;
+
     /* ======================================================
-     * 🎯 TARGET RESOLUTION (RESTORED)
+     * 🎯 TARGET RESOLUTION (FIXED)
      * ====================================================== */
     const companyYearlyTarget =
       Number(PIPELINE_CONFIG.COMPANY_YEARLY_TARGET) || 0;
@@ -321,7 +324,24 @@ export class PipelineService {
     let quarterlyTarget: number | null =
       companyYearlyTarget > 0 ? Math.round(companyYearlyTarget / 4) : null;
 
-    if (filters.salesOwnerId) {
+    /**
+     * 🔐 USER:
+     * Always use logged-in user's target
+     */
+    if (actor.type === 'USER') {
+      const user = await this.userRepo.findOne({
+        where: { id: actor.id },
+        select: ['yearlyTarget'],
+      });
+
+      if (user?.yearlyTarget) {
+        yearlyTarget = user.yearlyTarget;
+        quarterlyTarget = Math.round(user.yearlyTarget / 4);
+      }
+    } else if (filters.salesOwnerId) {
+      /**
+       * 👮 ADMIN filtered by Sales Rep
+       */
       const salesOwner = await this.userRepo.findOne({
         where: { id: filters.salesOwnerId },
         select: ['yearlyTarget'],
@@ -332,6 +352,9 @@ export class PipelineService {
         quarterlyTarget = Math.round(salesOwner.yearlyTarget / 4);
       }
     } else if (filters.preSalesOwnerIds?.length) {
+      /**
+       * 🤝 ADMIN filtered by Pre-Sales
+       */
       const preSalesOwners = await this.userRepo.find({
         where: { id: In(filters.preSalesOwnerIds) },
         select: ['yearlyTarget'],
@@ -348,6 +371,9 @@ export class PipelineService {
       }
     }
 
+    /* ======================================================
+     * 📊 PERCENT TO TARGET
+     * ====================================================== */
     const percentToTarget =
       yearlyTarget && yearlyTarget > 0
         ? Math.round((closedWonAmount / yearlyTarget) * 100)
@@ -415,33 +441,6 @@ export class PipelineService {
     };
   }
 
-  // async getByExternalDealId(externalDealId: string) {
-  //   if (!externalDealId.startsWith('OPS360-')) {
-  //     throw new BadRequestException('Invalid deal reference');
-  //   }
-
-  //   const fullDeal = await this.dealRepo.findOne({
-  //     where: { externalDealId },
-  //     relations: [
-  //       'salesOwner',
-  //       'preSalesOwners',
-  //       'stageExcel',
-  //       'stageManual',
-  //       'customer',
-  //     ],
-  //   });
-
-  //   if (!fullDeal) {
-  //     throw new NotFoundException(`Deal not found: ${externalDealId}`);
-  //   }
-
-  //   return {
-  //     success: true,
-  //     message: 'Deals retrieved successfully.',
-  //     deal: this.normalizeDeal(fullDeal),
-  //   };
-  // }
-
   async getByExternalDealId(
     actor: { type: 'ADMIN' | 'USER'; id: number },
     externalDealId: string,
@@ -481,15 +480,13 @@ export class PipelineService {
      CREATE (UI)
   ------------------------------*/
 
-  async createManualDeal(dto: CreatePipelineDealDto) {
+  async createManualDeal(dto: CreatePipelineDealDto, salesOwnerId: number) {
     const stage = await this.dealStagesService.getById(dto.stageId);
     if (!stage) {
       throw new BadRequestException('Invalid deal stage');
     }
 
-    const salesOwner = await this.userRepo.findOneBy({
-      id: dto.salesOwnerId,
-    });
+    const salesOwner = await this.userRepo.findOneBy({ id: salesOwnerId });
     if (!salesOwner) {
       throw new BadRequestException('Invalid sales owner');
     }
@@ -514,31 +511,22 @@ export class PipelineService {
 
     const deal = this.dealRepo.create() as PipelineDeal;
 
-    /** -----------------------------
-     * CORE FIELDS
-     ------------------------------*/
+    /** CORE FIELDS */
     deal.customer = customer;
-    deal.organizationName = customer.name; // 🔑 derived
+    deal.organizationName = customer.name;
     deal.dealName = dto.dealName;
-
     deal.dealValueExcel = dto.dealValue;
     deal.stageExcelId = stage.id;
-
     deal.salesOwnerId = salesOwner.id;
     deal.preSalesOwners = preSalesOwners;
-
     deal.expectedCloseDate = closeDate;
     deal.nextAction = dto.nextAction ?? undefined;
     deal.redFlag = dto.redFlag ?? undefined;
-
     deal.year = year;
     deal.quarter = quarter;
     deal.source = 'UI';
     deal.status = 'ACTIVE';
 
-    /** -----------------------------
-     * SAVE & GENERATE EXTERNAL ID
-     ------------------------------*/
     const saved = await this.dealRepo.save(deal);
 
     saved.externalDealId = `OPS360-${String(saved.id).padStart(6, '0')}`;
