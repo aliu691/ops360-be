@@ -4,8 +4,8 @@ import { Repository } from 'typeorm';
 import { User } from './users.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { UserAuthService } from '../auth/users/user-auth.service';
 import { AuthIdentity } from '../auth/auth.entity';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class UsersService {
@@ -15,7 +15,7 @@ export class UsersService {
 
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-    private readonly userAuthService: UserAuthService,
+    private readonly userAuthService: AuthService,
   ) {}
 
   /* ---------------- CREATE ---------------- */

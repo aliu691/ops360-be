@@ -15,9 +15,9 @@ import { DepartmentsModule } from './modules/departments/departments.module';
 import { PipelineModule } from './modules/pipeline/pipeline.module';
 import { DealStagesModule } from './modules/deal-stages/deal-stages.module';
 import { CustomersModule } from './modules/customers/customers.module';
-import { UserAuthModule } from './modules/auth/users/user-auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   providers: [
@@ -70,7 +70,7 @@ import { RolesGuard } from './modules/auth/guards/roles.guard';
     PipelineModule,
     DealStagesModule,
     CustomersModule,
-    UserAuthModule,
+    AuthModule,
   ],
 })
 export class AppModule {}

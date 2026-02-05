@@ -13,10 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { EmailService } from 'src/modules/email/email.service';
 import { passwordResetTemplate } from 'src/modules/email/templates/password-reset.template';
 import { randomUUID } from 'crypto';
-import { UserPasswordReset } from './user-password-reset.entity';
 import { userInvitationTemplate } from 'src/modules/email/templates/user-invitation.template';
-import { AuthIdentity } from '../auth.entity';
-import { AuthPasswordReset } from '../auth_password_resets';
 import { UsersService } from 'src/modules/users/users.service';
 import { AdminsService } from 'src/modules/admins/admins.service';
 import {
@@ -24,9 +21,11 @@ import {
   AdminRole,
   AdminStatus,
 } from 'src/modules/admins/admins.entity';
+import { AuthPasswordReset } from './auth_password_resets';
+import { AuthIdentity } from './auth.entity';
 
 @Injectable()
-export class UserAuthService {
+export class AuthService {
   constructor(
     @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
@@ -107,68 +106,6 @@ export class UserAuthService {
   /* =========================
      REQUEST PASSWORD RESET / SETUP
   ========================= */
-
-  // async requestPasswordReset(
-  //   email: string,
-  //   intent: 'INVITE' | 'RESET' = 'RESET',
-  // ) {
-  //   let identity = await this.identityRepo.findOne({ where: { email } });
-
-  //   if (!identity && intent === 'RESET') {
-  //     console.log('[RESET] No identity found:', email);
-  //     return {
-  //       success: true,
-  //       message: 'If this email exists, a reset link has been sent.',
-  //     };
-  //   }
-
-  //   if (!identity && intent === 'INVITE') {
-  //     identity = this.identityRepo.create({
-  //       email,
-  //       passwordHash: null,
-  //       status: 'ACTIVE',
-  //     });
-
-  //     await this.identityRepo.save(identity);
-  //     console.log('[INVITE] Created auth identity:', identity.id);
-  //   }
-
-  //   if (!identity) {
-  //     throw new Error('AuthIdentity missing after resolution');
-  //   }
-
-  //   const token = randomUUID();
-
-  //   const reset = this.newResetRepo.create({
-  //     authIdentity: identity,
-  //     token,
-  //     expiresAt: new Date(Date.now() + 1000 * 60 * 60),
-  //     used: false,
-  //   });
-
-  //   await this.newResetRepo.save(reset);
-
-  //   const link = `${process.env.FRONTEND_URL}/set-password?token=${token}&type=${intent}`;
-
-  //   try {
-  //     await this.emailService.sendEmail({
-  //       to: email,
-  //       subject:
-  //         intent === 'INVITE'
-  //           ? 'You’ve been invited to Ops360'
-  //           : 'Reset your Ops360 password',
-  //       html:
-  //         intent === 'INVITE'
-  //           ? userInvitationTemplate({ inviteLink: link })
-  //           : passwordResetTemplate({ resetLink: link }),
-  //     });
-  //   } catch (err) {}
-
-  //   return {
-  //     success: true,
-  //     message: 'If this email exists, a reset link has been sent.',
-  //   };
-  // }
 
   async requestPasswordReset(
     email: string,

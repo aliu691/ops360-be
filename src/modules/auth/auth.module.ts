@@ -3,17 +3,17 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
-import { UserAuthService } from './user-auth.service';
-import { UserAuthController } from './user-auth.controller';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
 import { UserPasswordReset } from './user-password-reset.entity';
 import { EmailModule } from 'src/modules/email/email.modules';
-import { AuthPasswordReset } from '../auth_password_resets';
-import { AuthIdentity } from '../auth.entity';
 import { UsersModule } from 'src/modules/users/users.module';
 import { AdminsModule } from 'src/modules/admins/admins.module';
-import { JwtStrategy } from '../strategies/jwt-stategy';
 import { JwtSignOptions } from '@nestjs/jwt';
 import { Admin } from 'src/modules/admins/admins.entity';
+import { AuthPasswordReset } from './auth_password_resets';
+import { AuthIdentity } from './auth.entity';
+import { JwtStrategy } from './strategies/jwt-stategy';
 
 @Module({
   imports: [
@@ -47,8 +47,8 @@ import { Admin } from 'src/modules/admins/admins.entity';
       },
     }),
   ],
-  providers: [UserAuthService, JwtStrategy],
-  controllers: [UserAuthController],
-  exports: [UserAuthService],
+  providers: [AuthService, JwtStrategy],
+  controllers: [AuthController],
+  exports: [AuthService],
 })
-export class UserAuthModule {}
+export class AuthModule {}
