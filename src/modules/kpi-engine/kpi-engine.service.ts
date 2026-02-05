@@ -4,99 +4,99 @@ import { MeetingEvaluator } from './evaluators/meeting-evaluator';
 import { WeeklyEvaluator } from './evaluators/weekly-evaluator';
 import { BatchPicker } from './evaluators/batch-picker';
 import { MeetingRow, WeeklyResult, KpiFilters } from './types/kpi-types';
+import { Meeting } from '../meetings/meetings.entity';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class KpiEngineService {
-  constructor(private readonly meetingsService: MeetingsService) {}
+  constructor(
+    private readonly meetingsService: MeetingsService,
+    private readonly usersService: UsersService,
+  ) {}
 
   /**
    * KPI evaluation for a rep
    * Defaults to latest available week
    * Supports optional filters: month, week, quarter
    */
-  async evaluateLatestWeekForRep(
+
+  async evaluateForRep(
     actor: {
       type: 'ADMIN' | 'USER';
-      id: number;
-      repName?: string;
+      id: number; // ✅ users.id
     },
-    repName: string,
+    repName: string | null,
     filters?: KpiFilters,
   ): Promise<WeeklyResult> {
-    /* ------------------------------------------------
-       🔐 ACCESS CONTROL
-    ------------------------------------------------ */
+    /* ----------------------------------
+       🧠 NORMALIZE FILTERS
+    ---------------------------------- */
+    const month =
+      typeof filters?.month === 'string' && filters.month.trim()
+        ? filters.month
+        : undefined;
+
+    const week =
+      filters?.week !== undefined && !isNaN(Number(filters.week))
+        ? Number(filters.week)
+        : undefined;
+
+    let meetings: Meeting[] = [];
+
+    /* ----------------------------------
+       🔐 ACCESS & DATA RESOLUTION (FINAL)
+    ---------------------------------- */
 
     if (actor.type === 'USER') {
-      const actorRepName = `${actor.repName}`;
-
-      if (actorRepName !== repName) {
-        throw new ForbiddenException(
-          'You are not allowed to view KPI data for other reps',
-        );
+      // ✅ USER → STRICTLY by userId
+      meetings = await this.meetingsService.getAllMeetingsByUserId(actor.id, {
+        month,
+        week,
+      });
+    } else {
+      // 👮 ADMIN / SUPER_ADMIN → by repName
+      if (!repName) {
+        throw new ForbiddenException('repName is required');
       }
+
+      meetings = await this.meetingsService.getAllMeetingsByRep(repName, {
+        month,
+        week,
+      });
     }
 
-    /* ------------------------------------------------
-       DATA FETCH
-    ------------------------------------------------ */
-
-    const allMeetings = await this.meetingsService.getAllMeetingsByRep(
-      actor,
-      repName,
-      {
-        month: filters?.month,
-        week: filters?.week ? Number(filters.week) : undefined,
-      },
-    );
-
-    if (!allMeetings.length) {
-      return this.emptyResult('No meetings found for this rep.');
+    if (!meetings.length) {
+      return this.emptyResult('No meetings found for this period.');
     }
 
-    let scopedMeetings = allMeetings;
-
-    /* ------------------------------------------------
-       QUARTER FILTER
-    ------------------------------------------------ */
+    /* ----------------------------------
+       📆 QUARTER FILTER
+    ---------------------------------- */
     if (filters?.quarter) {
       const [yearStr, qStr] = filters.quarter.split('-Q');
       const year = Number(yearStr);
       const quarter = Number(qStr);
 
-      scopedMeetings = scopedMeetings.filter((m) => {
-        if (!m.createdAt) return false;
+      meetings = meetings.filter((m) => {
         const d = new Date(m.createdAt);
-        const meetingQuarter = Math.floor(d.getMonth() / 3) + 1;
-        return d.getFullYear() === year && meetingQuarter === quarter;
+        const q = Math.floor(d.getMonth() / 3) + 1;
+        return d.getFullYear() === year && q === quarter;
       });
     }
 
-    if (!scopedMeetings.length) {
+    if (!meetings.length) {
       return this.emptyResult('No meetings found for selected period.');
     }
 
-    /* ------------------------------------------------
-       KPI EVALUATION
-    ------------------------------------------------ */
-    const latestBatch = BatchPicker.pickLatestBatch(
-      scopedMeetings as MeetingRow[],
-    );
-
-    const meetingFindings = latestBatch.map((m) =>
-      MeetingEvaluator.evaluate(m),
-    );
-
-    const weekly = WeeklyEvaluator.computeScoreAndStatus(latestBatch);
+    /* ----------------------------------
+       📊 KPI EVALUATION
+    ---------------------------------- */
+    const latestBatch = BatchPicker.pickLatestBatch(meetings as MeetingRow[]);
 
     return {
-      ...weekly,
-      meetingFindings,
+      ...WeeklyEvaluator.computeScoreAndStatus(latestBatch),
+      meetingFindings: latestBatch.map((m) => MeetingEvaluator.evaluate(m)),
     };
-
-    // ✅ TypeScript safety — logically unreachable
-    // but required for static analysis
-    return this.emptyResult('No KPI data available.');
   }
 
   /* --------------------------------

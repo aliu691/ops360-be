@@ -3,12 +3,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Meeting } from './meetings.entity';
 import { ConflictException } from '@nestjs/common';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class MeetingsService {
   constructor(
     @InjectRepository(Meeting)
     private readonly meetingRepo: Repository<Meeting>,
+
+    private readonly usersService: UsersService,
   ) {}
 
   async saveMeetings(meetings: Partial<Meeting>[]) {
@@ -55,12 +58,7 @@ export class MeetingsService {
   }
 
   async getMeetingsForActor(
-    actor: {
-      type: 'ADMIN' | 'USER';
-      id: number;
-      firstName?: string;
-      lastName?: string;
-    },
+    actor: { type: 'ADMIN' | 'USER'; id: number },
     page = 1,
     limit = 20,
     filters?: {
@@ -73,44 +71,28 @@ export class MeetingsService {
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.user', 'user');
 
-    /* -------------------------
-       OWNERSHIP ENFORCEMENT
-    ------------------------- */
+    /* 🔐 USER OWNERSHIP — NOW CORRECT */
     if (actor.type === 'USER') {
-      qb.andWhere('m."userId" = :userId', {
-        userId: actor.id,
+      qb.where('m."userId" = :userId', {
+        userId: actor.id, // ✅ users.id == meeting.userId
       });
     }
 
-    /* -------------------------
-       FILTER GUARDS
-    ------------------------- */
-    if (filters?.repName && actor.type !== 'ADMIN') {
-      throw new ForbiddenException('You are not allowed to filter by rep name');
-    }
-
-    /* -------------------------
-       OPTIONAL FILTERS
-    ------------------------- */
-    if (filters?.repName) {
+    /* 👮 ADMIN FILTERING */
+    if (actor.type === 'ADMIN' && filters?.repName) {
       qb.andWhere('m."repName" = :repName', {
         repName: filters.repName,
       });
     }
 
     if (filters?.month) {
-      qb.andWhere('m."reportingMonth" = :month', {
-        month: filters.month,
-      });
+      qb.andWhere('m."reportingMonth" = :month', { month: filters.month });
     }
 
     if (filters?.week !== undefined) {
-      qb.andWhere('m."reportingWeek" = :week', {
-        week: filters.week,
-      });
+      qb.andWhere('m."reportingWeek" = :week', { week: filters.week });
     }
 
-    // ✅ ONLY REQUIRED FIX — do NOT quote here
     qb.orderBy('m.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
@@ -128,16 +110,15 @@ export class MeetingsService {
   }
 
   async getAllMeetingsByRep(
-    actor: any,
     repName: string,
     filters?: {
       month?: string;
       week?: number;
     },
   ) {
-    const qb = this.meetingRepo.createQueryBuilder('m');
-
-    qb.where('m.repName = :repName', { repName });
+    const qb = this.meetingRepo
+      .createQueryBuilder('m')
+      .where('m.repName = :repName', { repName });
 
     if (filters?.month) {
       qb.andWhere('m.reportingMonth = :month', {
@@ -147,6 +128,34 @@ export class MeetingsService {
 
     if (filters?.week !== undefined) {
       qb.andWhere('m.reportingWeek = :week', {
+        week: filters.week,
+      });
+    }
+
+    qb.orderBy('m.createdAt', 'DESC');
+
+    return qb.getMany();
+  }
+
+  async getAllMeetingsByUserId(
+    userId: number,
+    filters?: {
+      month?: string;
+      week?: number;
+    },
+  ) {
+    const qb = this.meetingRepo
+      .createQueryBuilder('m')
+      .where('m."userId" = :userId', { userId });
+
+    if (filters?.month) {
+      qb.andWhere('m."reportingMonth" = :month', {
+        month: filters.month,
+      });
+    }
+
+    if (filters?.week !== undefined) {
+      qb.andWhere('m."reportingWeek" = :week', {
         week: filters.week,
       });
     }

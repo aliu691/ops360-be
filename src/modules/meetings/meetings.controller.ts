@@ -14,16 +14,25 @@ export class MeetingsController {
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
-    const filters = {
-      month,
-      week: week !== undefined ? Number(week) : undefined,
-      repName,
-    };
+    const actor = req.user;
+
+    // 🔒 USERS: repName is forbidden and ignored
+    const filters =
+      actor.type === 'ADMIN'
+        ? {
+            repName,
+            month,
+            week: week !== undefined ? Number(week) : undefined,
+          }
+        : {
+            month,
+            week: week !== undefined ? Number(week) : undefined,
+          };
 
     return this.meetingsService.getMeetingsForActor(
-      req.user,
-      page,
-      limit,
+      actor,
+      Number(page),
+      Number(limit),
       filters,
     );
   }

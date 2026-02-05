@@ -118,7 +118,7 @@ export function adminInviteTemplate(params: {
         line-height: 1.6;
       ">
         <p style="margin: 0 0 8px;">
-          <strong>Invited by:</strong> ${inviterEmail}
+          <strong>Invited by:</strong> Ops360 Team
         </p>
   
         <p style="margin: 0;">

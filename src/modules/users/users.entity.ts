@@ -4,7 +4,10 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { AuthIdentity } from '../auth/auth.entity';
 
 @Entity('users')
 export class User {
@@ -20,9 +23,9 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  /** 🔐 AUTH (NEW) */
-  @Column({ type: 'text', nullable: true })
-  passwordHash: string | null;
+  @ManyToOne(() => AuthIdentity)
+  @JoinColumn({ name: 'auth_identity_id' })
+  authIdentity: AuthIdentity;
 
   @Column({ type: 'text' })
   department: string;

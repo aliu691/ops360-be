@@ -24,17 +24,12 @@ export class UploadController {
   async uploadMeetings(
     @UploadedFile() file: Express.Multer.File,
     @Req() req,
-    @Query('repName') repName: string,
-    @Query('month') month: string, // YYYY-MM
-    @Query('week') week?: string, // number as string from query
+    @Query('salesOwnerId') salesOwnerId: string,
+    @Query('month') month: string,
+    @Query('week') week?: string,
   ) {
-    console.log('RECEIVED REP:', repName);
-    console.log('RECEIVED MONTH:', month);
-    console.log('RECEIVED WEEK:', week);
-    console.log('RECEIVED FILE:', file?.originalname);
-
-    if (!repName) {
-      throw new BadRequestException('repName is missing');
+    if (!salesOwnerId) {
+      throw new BadRequestException('salesOwnerId is missing');
     }
 
     if (!month) {
@@ -45,7 +40,13 @@ export class UploadController {
       throw new BadRequestException('reporting week is required');
     }
 
+    const parsedSalesOwnerId = Number(salesOwnerId);
     const reportingWeek = Number(week);
+
+    if (Number.isNaN(parsedSalesOwnerId)) {
+      throw new BadRequestException('salesOwnerId must be a number');
+    }
+
     if (Number.isNaN(reportingWeek)) {
       throw new BadRequestException('week must be a valid number');
     }
@@ -54,14 +55,17 @@ export class UploadController {
       throw new BadRequestException('file is missing');
     }
 
-    const user = await this.usersService.findByName(repName);
+    // 🔍 Resolve user from ID
+    const user = await this.usersService.findById(parsedSalesOwnerId);
 
     if (!user) {
-      throw new BadRequestException(`User '${repName}' not found`);
+      throw new BadRequestException(
+        `User with id ${parsedSalesOwnerId} not found`,
+      );
     }
 
     /* ============================
-     🔒 OWNERSHIP (EXTRA SAFETY)
+     🔒 OWNERSHIP ENFORCEMENT
   ============================ */
     if (req.user.type === 'USER' && req.user.id !== user.id) {
       throw new ForbiddenException(
@@ -70,10 +74,10 @@ export class UploadController {
     }
 
     const result = await this.uploadService.processMeetingsFile(file, {
-      repName,
+      repName: user.firstName, // ✅ derived, trusted
       reportingMonth: month,
       reportingWeek,
-      userId: req.user.id,
+      userId: user.id, // ✅ canonical
       actorType: req.user.type,
     });
 
@@ -82,7 +86,7 @@ export class UploadController {
       message: 'File processed successfully',
       totalRows: result.totalRows,
       reporting: {
-        repName,
+        repName: user.firstName,
         month,
         week: reportingWeek,
       },

@@ -4,28 +4,63 @@ import { Repository } from 'typeorm';
 import { User } from './users.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserAuthService } from '../auth/users/user-auth.service';
+import { AuthIdentity } from '../auth/auth.entity';
 
 @Injectable()
 export class UsersService {
   constructor(
+    @InjectRepository(AuthIdentity)
+    private readonly identityRepo: Repository<AuthIdentity>,
+
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    private readonly userAuthService: UserAuthService,
   ) {}
 
   /* ---------------- CREATE ---------------- */
 
+  async save(user: User) {
+    return this.userRepo.save(user);
+  }
+
   async create(dto: CreateUserDto) {
+    /**
+     * 1️⃣ Ensure auth identity exists
+     */
+    let identity = await this.identityRepo.findOne({
+      where: { email: dto.email },
+    });
+
+    if (!identity) {
+      identity = this.identityRepo.create({
+        email: dto.email,
+        passwordHash: null,
+        status: 'ACTIVE',
+      });
+
+      await this.identityRepo.save(identity);
+    }
+
+    /**
+     * 2️⃣ Create user linked to auth identity
+     */
     const user = this.userRepo.create({
       ...dto,
-      // authRole: 'USER',
       status: 'ACTIVE',
+      authIdentity: identity,
     });
 
     await this.userRepo.save(user);
 
+    /**
+     * 3️⃣ Send invite (set password)
+     */
+    await this.userAuthService.requestPasswordReset(user.email, 'USER_INVITE');
+
     return {
       success: true,
-      message: 'User created successfully',
+      message: 'User created and invitation email sent',
       item: user,
     };
   }
@@ -60,8 +95,24 @@ export class UsersService {
     };
   }
 
+  async findById(id: number) {
+    return this.userRepo.findOne({
+      where: { id },
+    });
+  }
+
   async findByName(firstName: string) {
     return this.userRepo.findOne({ where: { firstName } });
+  }
+
+  async findByAuthIdentityId(authIdentityId: number) {
+    return this.userRepo.findOne({
+      where: {
+        authIdentity: { id: authIdentityId },
+        status: 'ACTIVE',
+      },
+      relations: ['authIdentity'],
+    });
   }
 
   /* ---------------- UPDATE ---------------- */

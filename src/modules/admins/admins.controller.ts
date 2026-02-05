@@ -7,9 +7,8 @@ import {
   Param,
   UseGuards,
 } from '@nestjs/common';
-import { Public } from 'src/utils/decorator.public';
-import { Roles } from 'src/utils/decorator.roles';
-import { AdminRole } from './admins.entity';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { AdminsService } from './admins.service';
 
 @Controller('admins')
@@ -17,7 +16,7 @@ export class AdminsController {
   constructor(private readonly adminsService: AdminsService) {}
 
   @Post('invite')
-  @Roles(AdminRole.SUPER_ADMIN)
+  @Roles('SUPER_ADMIN')
   async inviteAdmin(@Body('email') email: string, @Req() req) {
     return this.adminsService.inviteAdmin(email, req.user);
   }
@@ -32,13 +31,13 @@ export class AdminsController {
   }
 
   @Get()
-  @Roles(AdminRole.SUPER_ADMIN)
+  @Roles('SUPER_ADMIN')
   findAll() {
     return this.adminsService.findAll();
   }
 
   @Get(':email')
-  @Roles(AdminRole.SUPER_ADMIN)
+  @Roles('SUPER_ADMIN')
   findOne(@Param('email') email: string) {
     return this.adminsService.findByEmail(email);
   }
