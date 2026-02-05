@@ -17,6 +17,9 @@ export class AuthPasswordReset {
   @JoinColumn({ name: 'auth_identity_id' })
   authIdentity: AuthIdentity;
 
+  @Column({ type: 'text', default: 'RESET' })
+  intent: 'RESET' | 'USER_INVITE' | 'ADMIN_INVITE';
+
   @Column({ type: 'uuid', unique: true })
   token: string;
 

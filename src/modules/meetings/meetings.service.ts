@@ -58,12 +58,7 @@ export class MeetingsService {
   }
 
   async getMeetingsForActor(
-    actor: {
-      type: 'ADMIN' | 'USER';
-      id: number; // ⚠️ this is auth_identity.id now
-      firstName?: string;
-      lastName?: string;
-    },
+    actor: { type: 'ADMIN' | 'USER'; id: number },
     page = 1,
     limit = 20,
     filters?: {
@@ -76,48 +71,26 @@ export class MeetingsService {
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.user', 'user');
 
-    /* -------------------------
-       OWNERSHIP ENFORCEMENT
-    ------------------------- */
+    /* 🔐 USER OWNERSHIP — NOW CORRECT */
     if (actor.type === 'USER') {
-      // ✅ Resolve real USER via auth_identity_id
-      const user = await this.usersService.findByAuthIdentityId(actor.id);
-
-      if (!user) {
-        throw new ForbiddenException('User account not found');
-      }
-
-      qb.andWhere('m."userId" = :userId', {
-        userId: user.id, // ✅ REAL users.id
+      qb.where('m."userId" = :userId', {
+        userId: actor.id, // ✅ users.id == meeting.userId
       });
     }
 
-    /* -------------------------
-       FILTER GUARDS
-    ------------------------- */
-    if (filters?.repName && actor.type !== 'ADMIN') {
-      throw new ForbiddenException('You are not allowed to filter by rep name');
-    }
-
-    /* -------------------------
-       OPTIONAL FILTERS
-    ------------------------- */
-    if (filters?.repName) {
+    /* 👮 ADMIN FILTERING */
+    if (actor.type === 'ADMIN' && filters?.repName) {
       qb.andWhere('m."repName" = :repName', {
         repName: filters.repName,
       });
     }
 
     if (filters?.month) {
-      qb.andWhere('m."reportingMonth" = :month', {
-        month: filters.month,
-      });
+      qb.andWhere('m."reportingMonth" = :month', { month: filters.month });
     }
 
     if (filters?.week !== undefined) {
-      qb.andWhere('m."reportingWeek" = :week', {
-        week: filters.week,
-      });
+      qb.andWhere('m."reportingWeek" = :week', { week: filters.week });
     }
 
     qb.orderBy('m.createdAt', 'DESC')

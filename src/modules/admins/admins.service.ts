@@ -14,6 +14,7 @@ import { AdminInvite } from './admins_invites.entity';
 import { EmailService } from '../email/email.service';
 import { adminInviteTemplate } from '../email/templates/admin-invite.template';
 import { AuthIdentity } from '../auth/auth.entity';
+import { AuthPasswordReset } from '../auth/auth_password_resets';
 
 @Injectable()
 export class AdminsService {
@@ -27,6 +28,9 @@ export class AdminsService {
     @InjectRepository(AdminInvite)
     private readonly inviteRepo: Repository<AdminInvite>,
 
+    @InjectRepository(AuthPasswordReset)
+    private readonly resetRepo: Repository<AuthPasswordReset>,
+
     private readonly emailService: EmailService,
   ) {}
 
@@ -37,40 +41,83 @@ export class AdminsService {
        INVITE ADMIN (SUPER_ADMIN only)
     -------------------------------- */
 
-  async inviteAdmin(email: string, inviter: Admin) {
-    const existingAdmin = await this.adminRepo.findOne({
-      where: { email },
-    });
+  // async inviteAdmin(email: string, inviter: Admin) {
+  //   const existingAdmin = await this.adminRepo.findOne({
+  //     where: { email },
+  //   });
 
+  //   if (existingAdmin) {
+  //     throw new BadRequestException('Admin already exists');
+  //   }
+
+  //   const token = randomUUID();
+
+  //   const invite = this.inviteRepo.create({
+  //     email,
+  //     token,
+  //     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+  //   });
+
+  //   await this.inviteRepo.save(invite);
+
+  //   const inviteLink = `${process.env.FRONTEND_URL}/set-password?token=${token}&actor=admin&type=invite`;
+
+  //   await this.emailService.sendEmail({
+  //     to: email,
+  //     subject: 'You’ve been invited to Ops360',
+  //     html: adminInviteTemplate({
+  //       inviterEmail: inviter.email,
+  //       inviteLink,
+  //     }),
+  //   });
+
+  //   return {
+  //     success: true,
+  //     message: 'Admin invitation sent successfully',
+  //   };
+  // }
+
+  async inviteAdmin(email: string, inviter: Admin) {
+    const existingAdmin = await this.adminRepo.findOne({ where: { email } });
     if (existingAdmin) {
       throw new BadRequestException('Admin already exists');
     }
 
+    let identity = await this.identityRepo.findOne({ where: { email } });
+    if (!identity) {
+      identity = await this.identityRepo.save(
+        this.identityRepo.create({
+          email,
+          passwordHash: null,
+          status: 'ACTIVE',
+        }),
+      );
+    }
+
     const token = randomUUID();
 
-    const invite = this.inviteRepo.create({
-      email,
-      token,
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-    });
+    await this.resetRepo.save(
+      this.resetRepo.create({
+        authIdentity: identity,
+        token,
+        intent: 'ADMIN_INVITE', // ✅ key difference
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+        used: false,
+      }),
+    );
 
-    await this.inviteRepo.save(invite);
-
-    const inviteLink = `${process.env.FRONTEND_URL}/set-password?token=${token}&actor=admin&type=invite`;
+    const link = `${process.env.FRONTEND_URL}/set-password?token=${token}`;
 
     await this.emailService.sendEmail({
       to: email,
       subject: 'You’ve been invited to Ops360',
       html: adminInviteTemplate({
         inviterEmail: inviter.email,
-        inviteLink,
+        inviteLink: link,
       }),
     });
 
-    return {
-      success: true,
-      message: 'Admin invitation sent successfully',
-    };
+    return { success: true };
   }
 
   /* --------------------------------

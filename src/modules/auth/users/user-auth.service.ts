@@ -19,6 +19,11 @@ import { AuthIdentity } from '../auth.entity';
 import { AuthPasswordReset } from '../auth_password_resets';
 import { UsersService } from 'src/modules/users/users.service';
 import { AdminsService } from 'src/modules/admins/admins.service';
+import {
+  Admin,
+  AdminRole,
+  AdminStatus,
+} from 'src/modules/admins/admins.entity';
 
 @Injectable()
 export class UserAuthService {
@@ -29,11 +34,11 @@ export class UserAuthService {
     @Inject(forwardRef(() => AdminsService))
     private readonly adminsService: AdminsService,
 
-    @InjectRepository(UserPasswordReset)
-    private readonly resetRepo: Repository<UserPasswordReset>,
-
     @InjectRepository(AuthPasswordReset)
-    private readonly newResetRepo: Repository<AuthPasswordReset>,
+    private readonly resetRepo: Repository<AuthPasswordReset>,
+
+    @InjectRepository(Admin)
+    private readonly adminRepo: Repository<Admin>,
 
     @InjectRepository(AuthIdentity)
     private readonly identityRepo: Repository<AuthIdentity>,
@@ -60,15 +65,14 @@ export class UserAuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // 🔐 ADMIN
     const admin = await this.adminsService.findByAuthIdentityId(identity.id);
-
     if (admin) {
       return {
         accessToken: this.jwtService.sign({
-          sub: identity.id,
+          sub: admin.id, // ✅ admins.id
           type: 'ADMIN',
           role: admin.role,
-          email: identity.email,
         }),
         actor: {
           type: 'ADMIN',
@@ -79,19 +83,16 @@ export class UserAuthService {
       };
     }
 
+    // 👤 USER
     const user = await this.usersService.findByAuthIdentityId(identity.id);
-
     if (!user) {
       throw new UnauthorizedException('Account not linked');
     }
 
     return {
       accessToken: this.jwtService.sign({
-        sub: identity.id,
+        sub: user.id, // ✅ users.id (THIS IS THE FIX)
         type: 'USER',
-        department: user.department,
-        email: identity.email,
-        firstName: user.firstName,
       }),
       actor: {
         type: 'USER',
@@ -107,57 +108,114 @@ export class UserAuthService {
      REQUEST PASSWORD RESET / SETUP
   ========================= */
 
+  // async requestPasswordReset(
+  //   email: string,
+  //   intent: 'INVITE' | 'RESET' = 'RESET',
+  // ) {
+  //   let identity = await this.identityRepo.findOne({ where: { email } });
+
+  //   if (!identity && intent === 'RESET') {
+  //     console.log('[RESET] No identity found:', email);
+  //     return {
+  //       success: true,
+  //       message: 'If this email exists, a reset link has been sent.',
+  //     };
+  //   }
+
+  //   if (!identity && intent === 'INVITE') {
+  //     identity = this.identityRepo.create({
+  //       email,
+  //       passwordHash: null,
+  //       status: 'ACTIVE',
+  //     });
+
+  //     await this.identityRepo.save(identity);
+  //     console.log('[INVITE] Created auth identity:', identity.id);
+  //   }
+
+  //   if (!identity) {
+  //     throw new Error('AuthIdentity missing after resolution');
+  //   }
+
+  //   const token = randomUUID();
+
+  //   const reset = this.newResetRepo.create({
+  //     authIdentity: identity,
+  //     token,
+  //     expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+  //     used: false,
+  //   });
+
+  //   await this.newResetRepo.save(reset);
+
+  //   const link = `${process.env.FRONTEND_URL}/set-password?token=${token}&type=${intent}`;
+
+  //   try {
+  //     await this.emailService.sendEmail({
+  //       to: email,
+  //       subject:
+  //         intent === 'INVITE'
+  //           ? 'You’ve been invited to Ops360'
+  //           : 'Reset your Ops360 password',
+  //       html:
+  //         intent === 'INVITE'
+  //           ? userInvitationTemplate({ inviteLink: link })
+  //           : passwordResetTemplate({ resetLink: link }),
+  //     });
+  //   } catch (err) {}
+
+  //   return {
+  //     success: true,
+  //     message: 'If this email exists, a reset link has been sent.',
+  //   };
+  // }
+
   async requestPasswordReset(
     email: string,
-    intent: 'INVITE' | 'RESET' = 'RESET',
+    intent: 'RESET' | 'USER_INVITE' = 'RESET',
   ) {
     let identity = await this.identityRepo.findOne({ where: { email } });
 
     if (!identity && intent === 'RESET') {
-      console.log('[RESET] No identity found:', email);
-      return {
-        success: true,
-        message: 'If this email exists, a reset link has been sent.',
-      };
+      return { success: true };
     }
 
-    if (!identity && intent === 'INVITE') {
+    if (!identity && intent === 'USER_INVITE') {
       identity = this.identityRepo.create({
         email,
         passwordHash: null,
         status: 'ACTIVE',
       });
-
       await this.identityRepo.save(identity);
-      console.log('[INVITE] Created auth identity:', identity.id);
-    }
-
-    if (!identity) {
-      throw new Error('AuthIdentity missing after resolution');
     }
 
     const token = randomUUID();
 
-    const reset = this.newResetRepo.create({
-      authIdentity: identity,
-      token,
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60),
-      used: false,
-    });
+    if (!identity) {
+      throw new Error('AuthIdentity must exist before creating reset token');
+    }
 
-    await this.newResetRepo.save(reset);
+    await this.resetRepo.save(
+      this.resetRepo.create({
+        authIdentity: { id: identity.id }, // ✅ correct
+        token,
+        intent: 'USER_INVITE',
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+        used: false,
+      }),
+    );
 
-    const link = `${process.env.FRONTEND_URL}/set-password?token=${token}&type=${intent}`;
+    const link = `${process.env.FRONTEND_URL}/set-password?token=${token}`;
 
     try {
       await this.emailService.sendEmail({
         to: email,
         subject:
-          intent === 'INVITE'
+          intent === 'USER_INVITE'
             ? 'You’ve been invited to Ops360'
             : 'Reset your Ops360 password',
         html:
-          intent === 'INVITE'
+          intent === 'USER_INVITE'
             ? userInvitationTemplate({ inviteLink: link })
             : passwordResetTemplate({ resetLink: link }),
       });
@@ -173,23 +231,44 @@ export class UserAuthService {
      RESET PASSWORD
   ========================= */
 
-  async resetPassword(token: string, newPassword: string) {
-    const reset = await this.newResetRepo.findOne({
+  async setPassword(token: string, newPassword: string) {
+    const reset = await this.resetRepo.findOne({
       where: { token },
       relations: ['authIdentity'],
     });
 
     if (!reset || reset.used || reset.expiresAt < new Date()) {
-      throw new BadRequestException('Invalid or expired token');
+      throw new BadRequestException('Invalid or expired link');
     }
 
-    const hash = await bcrypt.hash(newPassword, 10);
-
-    reset.authIdentity.passwordHash = hash;
+    // 1️⃣ Set password
+    reset.authIdentity.passwordHash = await bcrypt.hash(newPassword, 10);
     await this.identityRepo.save(reset.authIdentity);
 
+    // 2️⃣ Finalize account based on intent
+    if (reset.intent === 'ADMIN_INVITE') {
+      const existingAdmin = await this.adminRepo.findOne({
+        where: { authIdentity: { id: reset.authIdentity.id } },
+      });
+
+      if (!existingAdmin) {
+        await this.adminRepo.save(
+          this.adminRepo.create({
+            email: reset.authIdentity.email,
+            authIdentity: reset.authIdentity,
+            role: AdminRole.ADMIN,
+            status: AdminStatus.ACTIVE,
+          }),
+        );
+      }
+    }
+
+    // USER_INVITE needs nothing extra
+    // RESET needs nothing extra
+
+    // 3️⃣ Mark token used
     reset.used = true;
-    await this.newResetRepo.save(reset);
+    await this.resetRepo.save(reset);
 
     return {
       success: true,

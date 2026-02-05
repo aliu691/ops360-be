@@ -56,7 +56,7 @@ export class UsersService {
     /**
      * 3️⃣ Send invite (set password)
      */
-    await this.userAuthService.requestPasswordReset(user.email, 'INVITE');
+    await this.userAuthService.requestPasswordReset(user.email, 'USER_INVITE');
 
     return {
       success: true,
@@ -93,6 +93,12 @@ export class UsersService {
       success: true,
       item: user,
     };
+  }
+
+  async findById(id: number) {
+    return this.userRepo.findOne({
+      where: { id },
+    });
   }
 
   async findByName(firstName: string) {

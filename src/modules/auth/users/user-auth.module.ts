@@ -13,6 +13,7 @@ import { UsersModule } from 'src/modules/users/users.module';
 import { AdminsModule } from 'src/modules/admins/admins.module';
 import { JwtStrategy } from '../strategies/jwt-stategy';
 import { JwtSignOptions } from '@nestjs/jwt';
+import { Admin } from 'src/modules/admins/admins.entity';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { JwtSignOptions } from '@nestjs/jwt';
       AuthPasswordReset,
       AuthIdentity,
       UserPasswordReset,
+      Admin,
     ]),
 
     forwardRef(() => UsersModule),

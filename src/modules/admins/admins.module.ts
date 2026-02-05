@@ -13,10 +13,16 @@ import { AdminPasswordReset } from './admins_password_resets.entity';
 import { JwtStrategy } from '../auth/strategies/jwt-stategy';
 import { AuthIdentity } from '../auth/auth.entity';
 import { JwtSignOptions } from '@nestjs/jwt';
+import { AuthPasswordReset } from '../auth/auth_password_resets';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Admin, AdminInvite, AuthIdentity]),
+    TypeOrmModule.forFeature([
+      Admin,
+      AdminInvite,
+      AuthIdentity,
+      AuthPasswordReset,
+    ]),
     ConfigModule,
 
     JwtModule.registerAsync({

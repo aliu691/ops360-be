@@ -25,7 +25,7 @@ export class UserAuthController {
   @Post('request-password-reset')
   requestPasswordReset(
     @Body('email') email: string,
-    @Body('intent') intent?: 'INVITE' | 'RESET',
+    @Body('intent') intent?: 'USER_INVITE' | 'RESET',
   ) {
     return this.authService.requestPasswordReset(email, intent ?? 'RESET');
   }
@@ -39,6 +39,6 @@ export class UserAuthController {
     @Body('token') token: string,
     @Body('password') password: string,
   ) {
-    return this.authService.resetPassword(token, password);
+    return this.authService.setPassword(token, password);
   }
 }
