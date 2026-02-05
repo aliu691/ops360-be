@@ -23,6 +23,8 @@ import {
 } from 'src/modules/admins/admins.entity';
 import { AuthPasswordReset } from './auth_password_resets';
 import { AuthIdentity } from './auth.entity';
+import { AuditAction } from '../audit-logs/audit-actions';
+import { AuditService } from '../audit-logs/audit.service';
 
 @Injectable()
 export class AuthService {
@@ -44,13 +46,14 @@ export class AuthService {
 
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly auditService: AuditService,
   ) {}
 
   /* =========================
      LOGIN
   ========================= */
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, req?: any) {
     const identity = await this.identityRepo.findOne({
       where: { email, status: 'ACTIVE' },
     });
@@ -67,6 +70,18 @@ export class AuthService {
     // 🔐 ADMIN
     const admin = await this.adminsService.findByAuthIdentityId(identity.id);
     if (admin) {
+      await this.auditService.log({
+        req,
+        actorType: 'ADMIN',
+        actorId: admin.id,
+        action: AuditAction.LOGIN,
+        entity: 'AUTH',
+        metadata: {
+          email: admin.email,
+          role: admin.role,
+        },
+      });
+
       return {
         accessToken: this.jwtService.sign({
           sub: admin.id, // ✅ admins.id
@@ -87,6 +102,18 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Account not linked');
     }
+
+    await this.auditService.log({
+      req,
+      actorType: 'USER',
+      actorId: user.id,
+      action: AuditAction.LOGIN,
+      entity: 'AUTH',
+      metadata: {
+        email: user.email,
+        department: user.department,
+      },
+    });
 
     return {
       accessToken: this.jwtService.sign({

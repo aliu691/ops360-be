@@ -1,5 +1,5 @@
 // auth/user-auth.controller.ts
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/user-login.dto';
 import { Public } from './decorators/public.decorator';
@@ -13,8 +13,8 @@ export class AuthController {
   ========================= */
   @Public()
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password);
+  login(@Req() req, @Body() dto: LoginDto) {
+    return this.authService.login(dto.email, dto.password, req);
   }
 
   /* =========================

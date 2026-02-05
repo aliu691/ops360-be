@@ -14,6 +14,7 @@ import { Admin } from 'src/modules/admins/admins.entity';
 import { AuthPasswordReset } from './auth_password_resets';
 import { AuthIdentity } from './auth.entity';
 import { JwtStrategy } from './strategies/jwt-stategy';
+import { AuditModule } from '../audit-logs/audit.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { JwtStrategy } from './strategies/jwt-stategy';
 
     ConfigModule,
     EmailModule,
+    AuditModule,
 
     JwtModule.registerAsync({
       imports: [ConfigModule],

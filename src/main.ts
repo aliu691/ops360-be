@@ -5,6 +5,9 @@ import { DataSource } from 'typeorm';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  const server = app.getHttpAdapter().getInstance();
+  server.set('trust proxy', true);
+
   const port = process.env.PORT ?? 3000;
 
   app.enableCors({

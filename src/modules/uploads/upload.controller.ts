@@ -123,13 +123,12 @@ export class UploadController {
       throw new BadRequestException('year must be a number');
     }
 
-    const result = await this.uploadService.processPipelineFile(
-      file.buffer, // ✅ CHANGE HERE
-      {
-        salesOwnerId: parsedSalesOwnerId,
-        year: parsedYear,
-      },
-    );
+    const result = await this.uploadService.processPipelineFile(file.buffer, {
+      salesOwnerId: parsedSalesOwnerId,
+      year: parsedYear,
+      actorType: 'USER',
+      actorId: parsedSalesOwnerId,
+    });
 
     return {
       success: true,

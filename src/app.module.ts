@@ -18,6 +18,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { AuthModule } from './modules/auth/auth.module';
+import { AuditModule } from './modules/audit-logs/audit.module';
 
 @Module({
   providers: [
@@ -71,6 +72,7 @@ import { AuthModule } from './modules/auth/auth.module';
     DealStagesModule,
     CustomersModule,
     AuthModule,
+    AuditModule,
   ],
 })
 export class AppModule {}
