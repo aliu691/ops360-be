@@ -13,8 +13,7 @@ import { Admin, AdminRole, AdminStatus } from './admins.entity';
 import { AdminInvite } from './admins_invites.entity';
 import { EmailService } from '../email/email.service';
 import { adminInviteTemplate } from '../email/templates/admin-invite.template';
-import { AdminPasswordReset } from './admins_password_resets.entity';
-import { passwordResetTemplate } from '../email/templates/password-reset.template';
+import { AuthIdentity } from '../auth/auth.entity';
 
 @Injectable()
 export class AdminsService {
@@ -22,15 +21,18 @@ export class AdminsService {
     @InjectRepository(Admin)
     private readonly adminRepo: Repository<Admin>,
 
+    @InjectRepository(AuthIdentity)
+    private readonly identityRepo: Repository<AuthIdentity>,
+
     @InjectRepository(AdminInvite)
     private readonly inviteRepo: Repository<AdminInvite>,
-
-    @InjectRepository(AdminPasswordReset)
-    private readonly resetRepo: Repository<AdminPasswordReset>,
 
     private readonly emailService: EmailService,
   ) {}
 
+  async save(admin: Admin) {
+    return this.adminRepo.save(admin);
+  }
   /* --------------------------------
        INVITE ADMIN (SUPER_ADMIN only)
     -------------------------------- */
@@ -54,7 +56,7 @@ export class AdminsService {
 
     await this.inviteRepo.save(invite);
 
-    const inviteLink = `${process.env.FRONTEND_URL}/set-password?token=${token}&type=invite`;
+    const inviteLink = `${process.env.FRONTEND_URL}/set-password?token=${token}&actor=admin&type=invite`;
 
     await this.emailService.sendEmail({
       to: email,
@@ -85,16 +87,32 @@ export class AdminsService {
       throw new BadRequestException('Invite expired');
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    // 1️⃣ Create or fetch identity
+    let identity = await this.identityRepo.findOne({
+      where: { email: invite.email },
+    });
 
+    if (!identity) {
+      identity = this.identityRepo.create({
+        email: invite.email,
+        status: 'ACTIVE',
+      });
+    }
+
+    identity.passwordHash = await bcrypt.hash(password, 10);
+    await this.identityRepo.save(identity);
+
+    // 2️⃣ Create admin linked to identity
     const admin = this.adminRepo.create({
       email: invite.email,
-      passwordHash,
+      authIdentity: identity,
       role: AdminRole.ADMIN,
+      status: AdminStatus.ACTIVE,
     });
 
     await this.adminRepo.save(admin);
 
+    // 3️⃣ Mark invite as used
     invite.used = true;
     await this.inviteRepo.save(invite);
 
@@ -103,24 +121,6 @@ export class AdminsService {
       message:
         'Your admin account has been successfully set up. You can now log in.',
     };
-  }
-
-  /* --------------------------------
-       LOGIN
-    -------------------------------- */
-  async validateLogin(email: string, password: string) {
-    const admin = await this.adminRepo.findOne({ where: { email } });
-
-    if (!admin || admin.status !== AdminStatus.ACTIVE) {
-      throw new BadRequestException('Invalid credentials');
-    }
-
-    const valid = await bcrypt.compare(password, admin.passwordHash);
-    if (!valid) {
-      throw new BadRequestException('Invalid credentials');
-    }
-
-    return admin;
   }
 
   /* --------------------------------
@@ -161,82 +161,6 @@ export class AdminsService {
     return admin;
   }
 
-  /* --------------------------------
-       REQUEST PASSWORD RESET
-    -------------------------------- */
-
-  async requestPasswordReset(email: string) {
-    const admin = await this.adminRepo.findOne({ where: { email } });
-
-    // 🚫 Do NOT reveal if user exists
-    if (!admin) {
-      return {
-        success: true,
-        message: 'If this email exists, a reset link has been sent.',
-      };
-    }
-
-    const token = randomUUID();
-
-    const reset = this.resetRepo.create({
-      email,
-      token,
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60), // 1 hour
-    });
-
-    await this.resetRepo.save(reset);
-
-    const resetLink = `${process.env.FRONTEND_URL}/set-password?token=${token}&type=reset`;
-
-    await this.emailService.sendEmail({
-      to: email,
-      subject: 'Reset your Ops360 password',
-      html: passwordResetTemplate({
-        resetLink,
-      }),
-    });
-
-    return {
-      success: true,
-      message: 'If this email exists, a reset link has been sent.',
-    };
-  }
-
-  /* --------------------------------
-       RESET PASSWORD
-    -------------------------------- */
-
-  async resetPassword(token: string, newPassword: string) {
-    const reset = await this.resetRepo.findOne({ where: { token } });
-
-    if (!reset || reset.used) {
-      throw new BadRequestException('Invalid or used reset token');
-    }
-
-    if (reset.expiresAt < new Date()) {
-      throw new BadRequestException('Reset token expired');
-    }
-
-    const admin = await this.adminRepo.findOne({
-      where: { email: reset.email },
-    });
-
-    if (!admin) {
-      throw new BadRequestException('Admin not found');
-    }
-
-    admin.passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.adminRepo.save(admin);
-
-    reset.used = true;
-    await this.resetRepo.save(reset);
-
-    return {
-      success: true,
-      message: 'Password reset successful. You can now log in.',
-    };
-  }
-
   async findAll() {
     const items = await this.adminRepo.find({});
 
@@ -244,5 +168,15 @@ export class AdminsService {
       success: true,
       items,
     };
+  }
+
+  async findByAuthIdentityId(authIdentityId: number) {
+    return this.adminRepo.findOne({
+      where: {
+        authIdentity: { id: authIdentityId },
+        status: AdminStatus.ACTIVE,
+      },
+      relations: ['authIdentity'],
+    });
   }
 }

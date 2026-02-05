@@ -3,12 +3,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Meeting } from './meetings.entity';
 import { ConflictException } from '@nestjs/common';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class MeetingsService {
   constructor(
     @InjectRepository(Meeting)
     private readonly meetingRepo: Repository<Meeting>,
+
+    private readonly usersService: UsersService,
   ) {}
 
   async saveMeetings(meetings: Partial<Meeting>[]) {
@@ -57,7 +60,7 @@ export class MeetingsService {
   async getMeetingsForActor(
     actor: {
       type: 'ADMIN' | 'USER';
-      id: number;
+      id: number; // ⚠️ this is auth_identity.id now
       firstName?: string;
       lastName?: string;
     },
@@ -77,8 +80,15 @@ export class MeetingsService {
        OWNERSHIP ENFORCEMENT
     ------------------------- */
     if (actor.type === 'USER') {
+      // ✅ Resolve real USER via auth_identity_id
+      const user = await this.usersService.findByAuthIdentityId(actor.id);
+
+      if (!user) {
+        throw new ForbiddenException('User account not found');
+      }
+
       qb.andWhere('m."userId" = :userId', {
-        userId: actor.id,
+        userId: user.id, // ✅ REAL users.id
       });
     }
 
@@ -110,7 +120,6 @@ export class MeetingsService {
       });
     }
 
-    // ✅ ONLY REQUIRED FIX — do NOT quote here
     qb.orderBy('m.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
@@ -128,16 +137,15 @@ export class MeetingsService {
   }
 
   async getAllMeetingsByRep(
-    actor: any,
     repName: string,
     filters?: {
       month?: string;
       week?: number;
     },
   ) {
-    const qb = this.meetingRepo.createQueryBuilder('m');
-
-    qb.where('m.repName = :repName', { repName });
+    const qb = this.meetingRepo
+      .createQueryBuilder('m')
+      .where('m.repName = :repName', { repName });
 
     if (filters?.month) {
       qb.andWhere('m.reportingMonth = :month', {
@@ -147,6 +155,34 @@ export class MeetingsService {
 
     if (filters?.week !== undefined) {
       qb.andWhere('m.reportingWeek = :week', {
+        week: filters.week,
+      });
+    }
+
+    qb.orderBy('m.createdAt', 'DESC');
+
+    return qb.getMany();
+  }
+
+  async getAllMeetingsByUserId(
+    userId: number,
+    filters?: {
+      month?: string;
+      week?: number;
+    },
+  ) {
+    const qb = this.meetingRepo
+      .createQueryBuilder('m')
+      .where('m."userId" = :userId', { userId });
+
+    if (filters?.month) {
+      qb.andWhere('m."reportingMonth" = :month', {
+        month: filters.month,
+      });
+    }
+
+    if (filters?.week !== undefined) {
+      qb.andWhere('m."reportingWeek" = :week', {
         week: filters.week,
       });
     }

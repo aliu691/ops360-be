@@ -1,10 +1,10 @@
 import { ExecutionContext, Injectable } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY } from '../../utils/decorator.public';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 @Injectable()
-export class AdminAuthGuard extends AuthGuard('admin-jwt') {
+export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(private reflector: Reflector) {
     super();
   }
@@ -16,7 +16,6 @@ export class AdminAuthGuard extends AuthGuard('admin-jwt') {
     );
 
     if (isPublic) return true;
-
     return super.canActivate(context);
   }
 }

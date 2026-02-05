@@ -3,7 +3,10 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { AuthIdentity } from '../auth/auth.entity';
 
 export enum AdminRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
@@ -23,8 +26,9 @@ export class Admin {
   @Column({ unique: true })
   email: string;
 
-  @Column()
-  passwordHash: string;
+  @ManyToOne(() => AuthIdentity)
+  @JoinColumn({ name: 'auth_identity_id' })
+  authIdentity: AuthIdentity;
 
   @Column({
     type: 'enum',
