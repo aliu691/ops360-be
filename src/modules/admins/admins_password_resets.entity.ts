@@ -22,6 +22,6 @@ export class AdminPasswordReset {
   @Column({ default: false })
   used: boolean;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

@@ -16,6 +16,6 @@ export class Department {
   @Column()
   name: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

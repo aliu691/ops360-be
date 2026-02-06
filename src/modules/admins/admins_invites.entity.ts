@@ -22,6 +22,6 @@ export class AdminInvite {
   @Column({ default: false })
   used: boolean;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }
