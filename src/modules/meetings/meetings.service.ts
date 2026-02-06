@@ -1,80 +1,114 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Meeting } from './meetings.entity';
+import { ConflictException } from '@nestjs/common';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class MeetingsService {
   constructor(
     @InjectRepository(Meeting)
     private readonly meetingRepo: Repository<Meeting>,
+
+    private readonly usersService: UsersService,
   ) {}
 
   async saveMeetings(meetings: Partial<Meeting>[]) {
+    if (!meetings.length) return;
+
+    /* ------------------------------------------------
+       0️⃣ Hard validation (must have user context)
+    ------------------------------------------------ */
+    const invalid = meetings.find(
+      (m) => !m.userId || !m.reportingMonth || m.reportingWeek === undefined,
+    );
+
+    if (invalid) {
+      throw new Error(
+        'userId, reportingMonth and reportingWeek are required for all meetings',
+      );
+    }
+
+    const { userId, reportingMonth, reportingWeek } = meetings[0];
+
+    /* ------------------------------------------------
+       1️⃣ Prevent duplicate uploads PER USER
+    ------------------------------------------------ */
+    const existing = await this.meetingRepo.findOne({
+      where: {
+        userId,
+        reportingMonth,
+        reportingWeek,
+      },
+      select: ['id'],
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `User already uploaded meetings for week ${reportingWeek} (${reportingMonth}).`,
+      );
+    }
+
+    /* ------------------------------------------------
+       2️⃣ Persist meetings
+    ------------------------------------------------ */
     const entities = this.meetingRepo.create(meetings);
     await this.meetingRepo.save(entities);
   }
 
-  /**
-   * Get meetings for a rep
-   * ✅ Pagination
-   * ✅ Optional reportingMonth + reportingWeek filters
-   */
-  async getMeetingsByRep(
-    repName: string,
+  async getMeetingsForActor(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
     page = 1,
     limit = 20,
     filters?: {
-      month?: string; // YYYY-MM
-      week?: number; // business week number
+      month?: string;
+      week?: number;
+      repName?: string;
     },
   ) {
-    const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 20;
+    const qb = this.meetingRepo
+      .createQueryBuilder('m')
+      .leftJoinAndSelect('m.user', 'user');
 
-    const qb = this.meetingRepo.createQueryBuilder('m');
-
-    qb.where('m.repName = :repName', { repName });
-
-    /* ------------------------------
-       REPORTING MONTH FILTER
-    ------------------------------ */
-    if (filters?.month) {
-      qb.andWhere('m.reportingMonth = :month', {
-        month: filters.month,
+    /* 🔐 USER OWNERSHIP — NOW CORRECT */
+    if (actor.type === 'USER') {
+      qb.where('m."userId" = :userId', {
+        userId: actor.id, // ✅ users.id == meeting.userId
       });
     }
 
-    /* ------------------------------
-       REPORTING WEEK FILTER
-    ------------------------------ */
-    if (filters?.week !== undefined) {
-      qb.andWhere('m.reportingWeek = :week', {
-        week: filters.week,
+    /* 👮 ADMIN FILTERING */
+    if (actor.type === 'ADMIN' && filters?.repName) {
+      qb.andWhere('m."repName" = :repName', {
+        repName: filters.repName,
       });
+    }
+
+    if (filters?.month) {
+      qb.andWhere('m."reportingMonth" = :month', { month: filters.month });
+    }
+
+    if (filters?.week !== undefined) {
+      qb.andWhere('m."reportingWeek" = :week', { week: filters.week });
     }
 
     qb.orderBy('m.createdAt', 'DESC')
-      .skip((pageNum - 1) * limitNum)
-      .take(limitNum);
+      .skip((page - 1) * limit)
+      .take(limit);
 
     const [items, total] = await qb.getManyAndCount();
 
     return {
       success: true,
-      message: 'Meetings retrieved successfully.',
       total,
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(total / limitNum),
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
       items,
     };
   }
 
-  /**
-   * ✅ NON-PAGINATED VERSION (for KPI engine)
-   * KPI logic must always operate on full datasets
-   */
   async getAllMeetingsByRep(
     repName: string,
     filters?: {
@@ -82,9 +116,9 @@ export class MeetingsService {
       week?: number;
     },
   ) {
-    const qb = this.meetingRepo.createQueryBuilder('m');
-
-    qb.where('m.repName = :repName', { repName });
+    const qb = this.meetingRepo
+      .createQueryBuilder('m')
+      .where('m.repName = :repName', { repName });
 
     if (filters?.month) {
       qb.andWhere('m.reportingMonth = :month', {
@@ -103,51 +137,31 @@ export class MeetingsService {
     return qb.getMany();
   }
 
-  async getAllMeetings(
-    page = 1,
-    limit = 20,
+  async getAllMeetingsByUserId(
+    userId: number,
     filters?: {
       month?: string;
       week?: number;
     },
   ) {
-    const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 20;
+    const qb = this.meetingRepo
+      .createQueryBuilder('m')
+      .where('m."userId" = :userId', { userId });
 
-    const qb = this.meetingRepo.createQueryBuilder('m');
-
-    /* ------------------------------
-       REPORTING MONTH FILTER
-    ------------------------------ */
     if (filters?.month) {
-      qb.andWhere('m.reportingMonth = :month', {
+      qb.andWhere('m."reportingMonth" = :month', {
         month: filters.month,
       });
     }
 
-    /* ------------------------------
-       REPORTING WEEK FILTER
-    ------------------------------ */
     if (filters?.week !== undefined) {
-      qb.andWhere('m.reportingWeek = :week', {
+      qb.andWhere('m."reportingWeek" = :week', {
         week: filters.week,
       });
     }
 
-    qb.orderBy('m.createdAt', 'DESC')
-      .skip((pageNum - 1) * limitNum)
-      .take(limitNum);
+    qb.orderBy('m.createdAt', 'DESC');
 
-    const [items, total] = await qb.getManyAndCount();
-
-    return {
-      success: true,
-      message: 'Meetings retrieved successfully.',
-      total,
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(total / limitNum),
-      items,
-    };
+    return qb.getMany();
   }
 }

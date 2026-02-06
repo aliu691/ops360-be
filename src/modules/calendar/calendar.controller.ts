@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, BadRequestException } from '@nestjs/common';
 import { CalendarService } from './calendar.service';
 
 @Controller('calendar')
@@ -11,7 +11,15 @@ export class CalendarController {
   }
 
   @Get('weeks')
-  getWeeks(@Query('month') month: string) {
-    return this.calendarService.getWeeksForMonth(month);
+  getWeeks(@Query('month') month: string, @Query('userId') userId?: string) {
+    if (!month) {
+      throw new BadRequestException('month is required (YYYY-MM)');
+    }
+
+    if (!userId || isNaN(Number(userId))) {
+      throw new BadRequestException('userId is required');
+    }
+
+    return this.calendarService.getWeeksForMonth(month, Number(userId));
   }
 }

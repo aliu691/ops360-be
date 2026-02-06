@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Meeting } from '../meetings/meetings.entity';
@@ -30,23 +30,24 @@ export class CalendarService {
   }
 
   /* --------------------------------
-     WEEKS FOR MONTH
+     WEEKS FOR MONTH (PER USER)
      + hasData flag
   -------------------------------- */
-  async getWeeksForMonth(month: string) {
+  async getWeeksForMonth(month: string, userId: number) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+
     const [year, monthIndex] = month.split('-').map(Number);
 
     const firstDay = new Date(year, monthIndex - 1, 1);
     const lastDay = new Date(year, monthIndex, 0);
 
-    /* --------------------------------
-       FETCH WEEKS THAT ALREADY HAVE DATA
-       (source of truth)
-    -------------------------------- */
     const usedWeeksRaw = await this.meetingRepo
       .createQueryBuilder('m')
       .select('DISTINCT m.reportingWeek', 'week')
       .where('m.reportingMonth = :month', { month })
+      .andWhere('m.userId = :userId', { userId })
       .getRawMany();
 
     const usedWeeks = new Set<number>(usedWeeksRaw.map((r) => Number(r.week)));
@@ -66,7 +67,7 @@ export class CalendarService {
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
 
-      // ✅ ONLY include weeks whose START date is inside the selected month
+      // ✅ Only include weeks whose START date is inside the selected month
       if (start.getMonth() !== monthIndex - 1) {
         cursor.setDate(cursor.getDate() + 7);
         continue;
@@ -79,7 +80,7 @@ export class CalendarService {
         label: `Week ${week} (${this.format(start)} – ${this.format(end)})`,
         startDate: start,
         endDate: end,
-        hasData: usedWeeks.has(week), // ✅ FIX
+        hasData: usedWeeks.has(week), // ✅ PER-USER FIX
       });
 
       cursor.setDate(cursor.getDate() + 7);

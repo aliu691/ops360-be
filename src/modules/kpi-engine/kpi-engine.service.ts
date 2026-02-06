@@ -1,80 +1,101 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { MeetingsService } from '../meetings/meetings.service';
 import { MeetingEvaluator } from './evaluators/meeting-evaluator';
 import { WeeklyEvaluator } from './evaluators/weekly-evaluator';
 import { BatchPicker } from './evaluators/batch-picker';
 import { MeetingRow, WeeklyResult, KpiFilters } from './types/kpi-types';
+import { Meeting } from '../meetings/meetings.entity';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class KpiEngineService {
-  constructor(private readonly meetingsService: MeetingsService) {}
+  constructor(
+    private readonly meetingsService: MeetingsService,
+    private readonly usersService: UsersService,
+  ) {}
 
   /**
    * KPI evaluation for a rep
    * Defaults to latest available week
    * Supports optional filters: month, week, quarter
    */
-  async evaluateLatestWeekForRep(
-    repName: string,
+
+  async evaluateForRep(
+    actor: {
+      type: 'ADMIN' | 'USER';
+      id: number; // ✅ users.id
+    },
+    repName: string | null,
     filters?: KpiFilters,
   ): Promise<WeeklyResult> {
-    /**
-     * ✅ IMPORTANT:
-     * KPI MUST evaluate against ALL meetings,
-     * never paginated data
-     */
-    const allMeetings = await this.meetingsService.getAllMeetingsByRep(
-      repName,
-      {
-        month: filters?.month,
-        week: filters?.week ? Number(filters.week) : undefined,
-      },
-    );
+    /* ----------------------------------
+       🧠 NORMALIZE FILTERS
+    ---------------------------------- */
+    const month =
+      typeof filters?.month === 'string' && filters.month.trim()
+        ? filters.month
+        : undefined;
 
-    if (!allMeetings || allMeetings.length === 0) {
-      return this.emptyResult('No meetings found for this rep.');
+    const week =
+      filters?.week !== undefined && !isNaN(Number(filters.week))
+        ? Number(filters.week)
+        : undefined;
+
+    let meetings: Meeting[] = [];
+
+    /* ----------------------------------
+       🔐 ACCESS & DATA RESOLUTION (FINAL)
+    ---------------------------------- */
+
+    if (actor.type === 'USER') {
+      // ✅ USER → STRICTLY by userId
+      meetings = await this.meetingsService.getAllMeetingsByUserId(actor.id, {
+        month,
+        week,
+      });
+    } else {
+      // 👮 ADMIN / SUPER_ADMIN → by repName
+      if (!repName) {
+        throw new ForbiddenException('repName is required');
+      }
+
+      meetings = await this.meetingsService.getAllMeetingsByRep(repName, {
+        month,
+        week,
+      });
     }
 
-    let scopedMeetings = allMeetings;
+    if (!meetings.length) {
+      return this.emptyResult('No meetings found for this period.');
+    }
 
-    /* ------------------------------
-       QUARTER FILTER (YYYY-QN)
-       (Month & week already handled by DB)
-    ------------------------------ */
+    /* ----------------------------------
+       📆 QUARTER FILTER
+    ---------------------------------- */
     if (filters?.quarter) {
       const [yearStr, qStr] = filters.quarter.split('-Q');
       const year = Number(yearStr);
       const quarter = Number(qStr);
 
-      scopedMeetings = scopedMeetings.filter((m) => {
-        if (!m.createdAt) return false;
+      meetings = meetings.filter((m) => {
         const d = new Date(m.createdAt);
-        const meetingQuarter = Math.floor(d.getMonth() / 3) + 1;
-        return d.getFullYear() === year && meetingQuarter === quarter;
+        const q = Math.floor(d.getMonth() / 3) + 1;
+        return d.getFullYear() === year && q === quarter;
       });
     }
 
-    if (!scopedMeetings.length) {
+    if (!meetings.length) {
       return this.emptyResult('No meetings found for selected period.');
     }
 
-    /**
-     * ✅ Existing behavior preserved:
-     * Evaluate latest batch (latest week in scope)
-     */
-    const latestBatch = BatchPicker.pickLatestBatch(
-      scopedMeetings as MeetingRow[],
-    );
-
-    const meetingFindings = latestBatch.map((m) =>
-      MeetingEvaluator.evaluate(m),
-    );
-
-    const weekly = WeeklyEvaluator.computeScoreAndStatus(latestBatch);
+    /* ----------------------------------
+       📊 KPI EVALUATION
+    ---------------------------------- */
+    const latestBatch = BatchPicker.pickLatestBatch(meetings as MeetingRow[]);
 
     return {
-      ...weekly,
-      meetingFindings,
+      ...WeeklyEvaluator.computeScoreAndStatus(latestBatch),
+      meetingFindings: latestBatch.map((m) => MeetingEvaluator.evaluate(m)),
     };
   }
 

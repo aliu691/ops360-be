@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 import { User } from '../users/users.entity';
 
-@Entity()
+@Entity('meeting')
 export class Meeting {
   @PrimaryGeneratedColumn()
   id: number;
@@ -29,18 +29,25 @@ export class Meeting {
   meetingOutcome: string;
 
   @Column({ type: 'text' })
-  reportingMonth: string;
+  reportingMonth: string; // YYYY-MM
 
-  @Column({ type: 'integer' })
-  reportingWeek: number;
+  @Column({ type: 'int' })
+  reportingWeek: number; // ISO week number
 
   @CreateDateColumn()
-  createdAt: Date; // Date the weekly report was uploaded
+  createdAt: Date;
 
-  @ManyToOne(() => User, { nullable: true })
+  /* -----------------------------
+     RELATION
+  ----------------------------- */
+
+  @ManyToOne(() => User, {
+    nullable: false,
+    onDelete: 'RESTRICT',
+  })
   @JoinColumn({ name: 'userId' })
-  user?: User;
+  user: User;
 
-  @Column({ nullable: true })
-  userId?: number;
+  @Column()
+  userId: number;
 }

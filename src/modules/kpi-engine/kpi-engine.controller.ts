@@ -4,7 +4,9 @@ import {
   Param,
   Query,
   NotFoundException,
+  Req,
 } from '@nestjs/common';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { KpiEngineService } from './kpi-engine.service';
 
 @Controller('kpi')
@@ -12,29 +14,40 @@ export class KpiEngineController {
   constructor(private readonly kpiService: KpiEngineService) {}
 
   /**
+   * USER KPI
+   * GET /kpi/me
+   */
+  @Get('me')
+  async getMyKpi(
+    @Req() req,
+    @Query('month') month?: string,
+    @Query('week') week?: string,
+    @Query('quarter') quarter?: string,
+  ) {
+    return this.kpiService.evaluateForRep(req.user, null, {
+      month,
+      week,
+      quarter,
+    });
+  }
+
+  /**
+   * ADMIN / SUPER_ADMIN KPI
    * GET /kpi/:repName
-   * Optional filters:
-   *  - month=YYYY-MM
-   *  - week=YYYY-WW
-   *  - quarter=YYYY-QN
    */
   @Get(':repName')
-  async getLatestForRep(
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  async getKpiForRep(
+    @Req() req,
     @Param('repName') repName: string,
     @Query('month') month?: string,
     @Query('week') week?: string,
     @Query('quarter') quarter?: string,
   ) {
-    const result = await this.kpiService.evaluateLatestWeekForRep(repName, {
+    return this.kpiService.evaluateForRep(req.user, repName, {
       month,
       week,
       quarter,
     });
-
-    if (!result) {
-      throw new NotFoundException('No KPI data found for rep');
-    }
-
-    return result;
   }
 }

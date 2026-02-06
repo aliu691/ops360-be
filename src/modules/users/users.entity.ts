@@ -1,32 +1,43 @@
-// src/modules/users/users.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { AuthIdentity } from '../auth/auth.entity';
 
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ unique: true })
-  name: string;
+  @Column()
+  firstName: string;
 
-  @Column({ nullable: true })
-  email?: string;
+  @Column()
+  lastName: string;
+
+  @Column({ unique: true })
+  email: string;
+
+  @ManyToOne(() => AuthIdentity)
+  @JoinColumn({ name: 'auth_identity_id' })
+  authIdentity: AuthIdentity;
+
+  @Column({ type: 'text' })
+  department: string;
 
   @Column({ type: 'int', default: 0 })
-  weeklySalesTarget: number;
+  yearlyTarget: number;
 
-  @Column({ type: 'text', default: 'SALES_REP' })
-  role: 'ADMIN' | 'SALES_REP' | 'MANAGER';
-
+  /** ✅ UNCHANGED */
   @Column({ type: 'text', default: 'ACTIVE' })
   status: 'ACTIVE' | 'INACTIVE';
 
+  /** 🕒 AUDIT */
   @CreateDateColumn()
   createdAt: Date;
 
