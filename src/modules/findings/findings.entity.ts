@@ -25,6 +25,6 @@ export class Finding {
   @Column({ default: 'medium' })
   severity: string; // "low" | "medium" | "high"
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

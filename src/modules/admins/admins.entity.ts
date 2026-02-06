@@ -40,6 +40,6 @@ export class Admin {
   @Column({ type: 'enum', enum: AdminStatus, default: AdminStatus.ACTIVE })
   status: AdminStatus;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }
