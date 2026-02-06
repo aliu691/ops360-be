@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -31,5 +31,11 @@ export class AuditController {
       page: Number(page),
       limit: Number(limit),
     });
+  }
+
+  @Get(':id')
+  @Roles('SUPER_ADMIN')
+  async getAuditLogById(@Param('id') id: string) {
+    return this.auditService.findOne(Number(id));
   }
 }
