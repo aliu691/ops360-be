@@ -1,18 +1,22 @@
+import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import { DataSource } from 'typeorm';
-import { User } from './modules/users/users.entity';
-import { Meeting } from './modules/meetings/meetings.entity';
 
 dotenv.config({
-  path: process.env.NODE_ENV === 'staging' ? '.env.staging' : '.env',
+  path: process.env.NODE_ENV === 'staging' ? '.env.staging' : '.env.production',
 });
 
 const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  entities: [User, Meeting],
-  migrations: ['dist/migrations/*.js'],
+
+  // ✅ THIS IS THE KEY FIX
+  entities: ['src/**/*.entity.ts'],
+
+  // ✅ use TS migrations for generation
+  migrations: ['src/migrations/*.ts'],
+
   synchronize: false,
   logging: false,
 });
