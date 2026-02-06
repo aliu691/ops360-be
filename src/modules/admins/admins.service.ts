@@ -41,42 +41,6 @@ export class AdminsService {
        INVITE ADMIN (SUPER_ADMIN only)
     -------------------------------- */
 
-  // async inviteAdmin(email: string, inviter: Admin) {
-  //   const existingAdmin = await this.adminRepo.findOne({
-  //     where: { email },
-  //   });
-
-  //   if (existingAdmin) {
-  //     throw new BadRequestException('Admin already exists');
-  //   }
-
-  //   const token = randomUUID();
-
-  //   const invite = this.inviteRepo.create({
-  //     email,
-  //     token,
-  //     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
-  //   });
-
-  //   await this.inviteRepo.save(invite);
-
-  //   const inviteLink = `${process.env.FRONTEND_URL}/set-password?token=${token}&actor=admin&type=invite`;
-
-  //   await this.emailService.sendEmail({
-  //     to: email,
-  //     subject: 'You’ve been invited to Ops360',
-  //     html: adminInviteTemplate({
-  //       inviterEmail: inviter.email,
-  //       inviteLink,
-  //     }),
-  //   });
-
-  //   return {
-  //     success: true,
-  //     message: 'Admin invitation sent successfully',
-  //   };
-  // }
-
   async inviteAdmin(email: string, inviter: Admin) {
     const existingAdmin = await this.adminRepo.findOne({ where: { email } });
     if (existingAdmin) {

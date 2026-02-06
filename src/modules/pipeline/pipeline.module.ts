@@ -8,6 +8,7 @@ import { UsersModule } from '../users/users.module';
 import { User } from '../users/users.entity';
 import { Customer } from '../customers/customer.entity';
 import { CustomersModule } from '../customers/customers.module';
+import { AuditModule } from '../audit-logs/audit.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { CustomersModule } from '../customers/customers.module';
     DealStagesModule,
     UsersModule,
     CustomersModule,
+    AuditModule,
   ],
   providers: [PipelineService],
   controllers: [PipelineController],

@@ -17,6 +17,8 @@ import { UpdatePipelineDealDto } from './dto/update-pipeline-deal.dto';
 import { PIPELINE_CONFIG } from 'src/config/pipeline.config';
 import { CustomersService } from '../customers/customers.service';
 import { Customer } from '../customers/customer.entity';
+import { AuditService } from '../audit-logs/audit.service';
+import { AuditAction } from '../audit-logs/audit-actions';
 
 @Injectable()
 export class PipelineService {
@@ -30,6 +32,7 @@ export class PipelineService {
     private readonly customerRepo: Repository<Customer>,
     private readonly dealStagesService: DealStagesService,
     private readonly customersService: CustomersService,
+    private readonly auditService: AuditService,
   ) {}
 
   /* -----------------------------
@@ -543,6 +546,24 @@ export class PipelineService {
       ],
     });
 
+    await this.auditService.log({
+      actorType: 'USER', // manual creation is done by sales owner
+      actorId: salesOwnerId,
+      action: AuditAction.CREATE_PIPELINE_OPPORTUNITY,
+      entity: 'PIPELINE_DEAL',
+      entityId: saved.id,
+      metadata: {
+        externalDealId: saved.externalDealId,
+        dealName: saved.dealName,
+        dealValue: saved.dealValueExcel,
+        customerId: customer.id,
+        stageId: stage.id,
+        year,
+        quarter,
+        source: 'UI',
+      },
+    });
+
     return {
       success: true,
       message: 'Deal created successfully',
@@ -567,6 +588,17 @@ export class PipelineService {
     if (!deal) {
       throw new NotFoundException(`Deal not found: ${externalDealId}`);
     }
+
+    const before = {
+      dealName: deal.dealName,
+      dealValueManual: deal.dealValueManual,
+      stageManualId: deal.stageManualId,
+      salesOwnerId: deal.salesOwnerId,
+      expectedCloseDate: deal.expectedCloseDate,
+      nextAction: deal.nextAction,
+      redFlag: deal.redFlag,
+      customerId: deal.customer?.id,
+    };
 
     // 🔒 OWNERSHIP CHECK
     if (actor.type === 'USER' && deal.salesOwnerId !== actor.id) {
@@ -654,6 +686,29 @@ export class PipelineService {
     // (customer, stage, ownership, values, etc…)
 
     await this.dealRepo.save(deal);
+
+    await this.auditService.log({
+      actorType: actor.type,
+      actorId: actor.id,
+      action: AuditAction.UPDATE_PIPELINE_OPPORTUNITY,
+      entity: 'PIPELINE_DEAL',
+      entityId: deal.id,
+      metadata: {
+        externalDealId: deal.externalDealId,
+        before,
+        after: {
+          dealName: deal.dealName,
+          dealValueManual: deal.dealValueManual,
+          stageManualId: deal.stageManualId,
+          salesOwnerId: deal.salesOwnerId,
+          expectedCloseDate: deal.expectedCloseDate,
+          nextAction: deal.nextAction,
+          redFlag: deal.redFlag,
+          customerId: deal.customer?.id,
+        },
+        source: 'UI',
+      },
+    });
 
     const fullDeal = await this.dealRepo.findOne({
       where: { id: deal.id },

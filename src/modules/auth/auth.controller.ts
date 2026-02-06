@@ -1,20 +1,20 @@
 // auth/user-auth.controller.ts
-import { Controller, Post, Body } from '@nestjs/common';
-import { UserAuthService } from './user-auth.service';
-import { LoginDto } from '../dto/user-login.dto';
-import { Public } from '../decorators/public.decorator';
+import { Controller, Post, Body, Req } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { LoginDto } from './dto/user-login.dto';
+import { Public } from './decorators/public.decorator';
 
 @Controller('auth')
-export class UserAuthController {
-  constructor(private readonly authService: UserAuthService) {}
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
 
   /* =========================
      LOGIN
   ========================= */
   @Public()
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password);
+  login(@Req() req, @Body() dto: LoginDto) {
+    return this.authService.login(dto.email, dto.password, req);
   }
 
   /* =========================

@@ -9,6 +9,8 @@ import { User } from '../users/users.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CustomersModule } from '../customers/customers.module';
 import { memoryStorage } from 'multer';
+import { AuditService } from '../audit-logs/audit.service';
+import { AuditModule } from '../audit-logs/audit.module';
 
 @Module({
   imports: [
@@ -17,6 +19,7 @@ import { memoryStorage } from 'multer';
     PipelineModule,
     UsersModule,
     CustomersModule,
+    AuditModule,
     MulterModule.register({
       dest: './uploads', // local folder storage
       storage: memoryStorage(), // 🔥 THIS IS THE FIX

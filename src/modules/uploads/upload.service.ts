@@ -7,10 +7,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
+import { AuditService } from '../audit-logs/audit.service';
 import { CustomersService } from '../customers/customers.service';
 import { MeetingsService } from '../meetings/meetings.service';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { User } from '../users/users.entity';
+import { AuditAction } from '../audit-logs/audit-actions';
 
 @Injectable()
 export class UploadService {
@@ -23,6 +25,7 @@ export class UploadService {
     private readonly meetingsService: MeetingsService,
     private readonly pipelineService: PipelineService,
     private readonly customersService: CustomersService,
+    private readonly auditService: AuditService,
   ) {}
 
   async processMeetingsFile(
@@ -138,6 +141,19 @@ export class UploadService {
   ============================ */
     await this.meetingsService.saveMeetings(filteredMeetings);
 
+    await this.auditService.log({
+      actorType,
+      actorId: userId,
+      action: AuditAction.UPLOAD_MEETINGS,
+      entity: 'MEETING',
+      metadata: {
+        repName,
+        reportingMonth,
+        reportingWeek,
+        rowsUploaded: filteredMeetings.length,
+      },
+    });
+
     return {
       totalRows: filteredMeetings.length,
       reporting: {
@@ -153,6 +169,8 @@ export class UploadService {
     params: {
       salesOwnerId: number;
       year: number;
+      actorType: 'USER' | 'ADMIN';
+      actorId: number;
     },
   ) {
     const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
@@ -271,6 +289,18 @@ export class UploadService {
     this.logger.log(
       `Pipeline import completed. Total rows processed: ${processed}`,
     );
+
+    await this.auditService.log({
+      actorType: params.actorType,
+      actorId: params.actorId,
+      action: AuditAction.UPLOAD_PIPELINE,
+      entity: 'PIPELINE',
+      entityId: params.salesOwnerId,
+      metadata: {
+        year: params.year,
+        totalRows: processed,
+      },
+    });
 
     return { totalRows: processed };
   }
