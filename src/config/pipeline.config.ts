@@ -1,3 +1,0 @@
-export const PIPELINE_CONFIG = {
-  COMPANY_YEARLY_TARGET: 5_000_000_000, // ₦5B
-};
