@@ -1,27 +1,43 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as sgMail from '@sendgrid/mail';
+import axios from 'axios';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
-  constructor() {
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
-  }
-
   async sendEmail(options: { to: string; subject: string; html: string }) {
     try {
-      await sgMail.send({
-        to: options.to,
-        from: {
-          email: process.env.SENDGRID_FROM_EMAIL!,
-          name: process.env.SENDGRID_FROM_NAME!,
+      await axios.post(
+        'https://api.zeptomail.com/v1.1/email',
+        {
+          from: {
+            address: process.env.ZEPTO_FROM_EMAIL!,
+            name: process.env.ZEPTO_FROM_NAME!,
+          },
+          to: [
+            {
+              email_address: {
+                address: options.to,
+              },
+            },
+          ],
+          subject: options.subject,
+          htmlbody: options.html,
         },
-        subject: options.subject,
-        html: options.html,
-      });
-    } catch (error) {
-      this.logger.error('SendGrid error', error);
+        {
+          headers: {
+            Authorization: `Zoho-enczapikey ${process.env.ZEPTO_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      this.logger.log(`Email sent to ${options.to}`);
+    } catch (error: any) {
+      this.logger.error(
+        `ZeptoMail error sending to ${options.to}`,
+        error?.response?.data || error.message,
+      );
       throw error;
     }
   }
