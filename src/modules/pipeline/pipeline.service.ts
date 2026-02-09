@@ -156,7 +156,14 @@ export class PipelineService {
         : null,
 
       // 🔑 normalized fields for frontend
-      displayValue: effectiveValue !== null ? Number(effectiveValue) : null,
+      displayValue: Number(
+        deal.dealValueManual !== null &&
+          deal.dealValueManual !== undefined &&
+          deal.dealValueManual > 0
+          ? deal.dealValueManual
+          : deal.dealValueExcel,
+      ),
+
       displayStage: effectiveStage
         ? {
             id: effectiveStage.id,
@@ -426,7 +433,14 @@ export class PipelineService {
 
     const normalizedItems = items.map((deal) => ({
       ...deal,
-      displayValue: Number(deal.dealValueManual ?? deal.dealValueExcel),
+      displayValue: Number(
+        deal.dealValueManual !== null &&
+          deal.dealValueManual !== undefined &&
+          deal.dealValueManual > 0
+          ? deal.dealValueManual
+          : deal.dealValueExcel,
+      ),
+
       displayStage: deal.stageManual ?? deal.stageExcel,
     }));
 
