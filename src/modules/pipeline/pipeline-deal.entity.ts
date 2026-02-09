@@ -76,16 +76,22 @@ export class PipelineDeal {
       ------------------------------*/
   @Column({
     name: 'deal_value_excel',
-    type: 'numeric',
+    type: 'bigint',
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => Number(value),
+    },
     default: 0,
   })
   dealValueExcel: number;
 
   @Column({
     name: 'deal_value_manual',
-    type: 'numeric',
-    precision: 15,
-    scale: 2,
+    type: 'bigint',
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => Number(value),
+    },
     nullable: true,
   })
   dealValueManual: number;

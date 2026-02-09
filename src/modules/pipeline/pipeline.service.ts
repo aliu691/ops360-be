@@ -14,7 +14,6 @@ import { ImportPipelineDealDto } from './dto/import-pipeline.dto';
 import { In } from 'typeorm';
 import { User } from '../users/users.entity';
 import { UpdatePipelineDealDto } from './dto/update-pipeline-deal.dto';
-import { PIPELINE_CONFIG } from 'src/config/pipeline.config';
 import { CustomersService } from '../customers/customers.service';
 import { Customer } from '../customers/customer.entity';
 import { AuditService } from '../audit-logs/audit.service';
@@ -320,8 +319,7 @@ export class PipelineService {
     /* ======================================================
      * 🎯 TARGET RESOLUTION (FIXED)
      * ====================================================== */
-    const companyYearlyTarget =
-      Number(PIPELINE_CONFIG.COMPANY_YEARLY_TARGET) || 0;
+    const companyYearlyTarget = Number(process.env.COMPANY_YEARLY_TARGET) || 0;
 
     let yearlyTarget: number | null = companyYearlyTarget;
     let quarterlyTarget: number | null =

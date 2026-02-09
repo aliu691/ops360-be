@@ -30,7 +30,13 @@ export class User {
   @Column({ type: 'text' })
   department: string;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({
+    type: 'bigint',
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => Number(value),
+    },
+  })
   yearlyTarget: number;
 
   /** ✅ UNCHANGED */
