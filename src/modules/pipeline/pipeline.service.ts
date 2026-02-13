@@ -83,9 +83,20 @@ export class PipelineService {
     }
 
     if (filters.preSalesOwnerIds?.length) {
-      qb.andWhere('preSalesOwners.id IN (:...preSalesOwnerIds)', {
-        preSalesOwnerIds: filters.preSalesOwnerIds,
-      });
+      qb.andWhere(
+        `
+        (
+          SELECT COUNT(DISTINCT ps.pre_sales_owner_id)
+          FROM pipeline_deal_pre_sales ps
+          WHERE ps.deal_id = deal.id
+          AND ps.pre_sales_owner_id IN (:...preSalesOwnerIds)
+        ) = :preSalesCount
+        `,
+        {
+          preSalesOwnerIds: filters.preSalesOwnerIds,
+          preSalesCount: filters.preSalesOwnerIds.length,
+        },
+      );
     }
   }
 
@@ -128,14 +139,17 @@ export class PipelineService {
     if (filters.preSalesOwnerIds?.length) {
       qb.andWhere(
         `
-        EXISTS (
-          SELECT 1
+        (
+          SELECT COUNT(DISTINCT ps.pre_sales_owner_id)
           FROM pipeline_deal_pre_sales ps
           WHERE ps.deal_id = deal.id
           AND ps.pre_sales_owner_id IN (:...preSalesOwnerIds)
-        )
+        ) = :preSalesCount
         `,
-        { preSalesOwnerIds: filters.preSalesOwnerIds },
+        {
+          preSalesOwnerIds: filters.preSalesOwnerIds,
+          preSalesCount: filters.preSalesOwnerIds.length,
+        },
       );
     }
   }
