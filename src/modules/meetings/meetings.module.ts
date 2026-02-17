@@ -4,9 +4,10 @@ import { MeetingsService } from './meetings.service';
 import { MeetingsController } from './meetings.controller';
 import { Meeting } from './meetings.entity';
 import { UsersModule } from '../users/users.module';
+import { AuditModule } from '../audit-logs/audit.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Meeting]), UsersModule],
+  imports: [TypeOrmModule.forFeature([Meeting]), UsersModule, AuditModule],
   controllers: [MeetingsController],
   providers: [MeetingsService],
   exports: [MeetingsService],

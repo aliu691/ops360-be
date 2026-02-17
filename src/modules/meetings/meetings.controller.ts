@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, Delete } from '@nestjs/common';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { MeetingsService } from './meetings.service';
 
 @Controller('meetings')
@@ -35,5 +36,12 @@ export class MeetingsController {
       Number(limit),
       filters,
     );
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  async deleteMeeting(@Req() req, @Param('id') id: number) {
+    const actor = req.user;
+    return this.meetingsService.deleteMeeting(actor, Number(id));
   }
 }

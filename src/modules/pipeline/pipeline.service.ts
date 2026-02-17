@@ -755,6 +755,49 @@ export class PipelineService {
   }
 
   /* -----------------------------
+     Delete
+  ------------------------------*/
+
+  async deleteDeal(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
+    dealId: number,
+  ) {
+    const deal = await this.dealRepo.findOne({
+      where: { id: dealId },
+      relations: ['customer', 'stageExcel', 'stageManual'],
+    });
+
+    if (!deal) {
+      throw new Error('Opportunity not found');
+    }
+
+    await this.dealRepo.remove(deal);
+
+    await this.auditService.log({
+      actorType: actor.type,
+      actorId: actor.id,
+      action: AuditAction.DELETE_OPPORTUNITY,
+      entity: 'PIPELINE_DEAL',
+      entityId: deal.id,
+      metadata: {
+        externalDealId: deal.externalDealId,
+        dealName: deal.dealName,
+        dealValue: deal.dealValueManual ?? deal.dealValueExcel,
+        customerId: deal.customer?.id,
+        stageId: deal.stageManual?.id ?? deal.stageExcel?.id,
+        year: deal.year,
+        quarter: deal.quarter,
+        source: deal.source,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Opportunity deleted successfully',
+    };
+  }
+
+  /* -----------------------------
      EXCEL UPSERT
   ------------------------------*/
 

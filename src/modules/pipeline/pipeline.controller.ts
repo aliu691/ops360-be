@@ -8,10 +8,12 @@ import {
   Patch,
   Req,
   ForbiddenException,
+  Delete,
 } from '@nestjs/common';
 import { PipelineService } from './pipeline.service';
 import { CreatePipelineDealDto } from './dto/create-pipeline-deal.dto';
 import { UpdatePipelineDealDto } from './dto/update-pipeline-deal.dto';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('pipeline')
 export class PipelineController {
@@ -67,5 +69,12 @@ export class PipelineController {
     @Body() dto: UpdatePipelineDealDto,
   ) {
     return this.service.updateDeal(req.user, externalDealId, dto);
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  async deleteOpportunity(@Req() req, @Param('id') id: number) {
+    const actor = req.user;
+    return this.service.deleteDeal(actor, Number(id));
   }
 }
