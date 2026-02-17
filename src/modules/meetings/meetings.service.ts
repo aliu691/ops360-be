@@ -1,9 +1,15 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Meeting } from './meetings.entity';
 import { ConflictException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
+import { AuditService } from '../audit-logs/audit.service';
+import { AuditAction } from '../audit-logs/audit-actions';
 
 @Injectable()
 export class MeetingsService {
@@ -12,6 +18,8 @@ export class MeetingsService {
     private readonly meetingRepo: Repository<Meeting>,
 
     private readonly usersService: UsersService,
+
+    private readonly auditService: AuditService,
   ) {}
 
   async saveMeetings(meetings: Partial<Meeting>[]) {
@@ -163,5 +171,42 @@ export class MeetingsService {
     qb.orderBy('m.createdAt', 'DESC');
 
     return qb.getMany();
+  }
+
+  async deleteMeeting(
+    actor: { type: 'ADMIN' | 'USER'; id: number },
+    meetingId: number,
+  ) {
+    const meeting = await this.meetingRepo.findOne({
+      where: { id: meetingId },
+      relations: ['user'],
+    });
+
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+
+    await this.meetingRepo.remove(meeting);
+
+    // ✅ Audit log
+    await this.auditService.log({
+      actorType: actor.type,
+      actorId: actor.id,
+      action: AuditAction.DELETE_MEETING,
+      entity: 'MEETING',
+      entityId: meeting.id,
+      metadata: {
+        repName: meeting.repName,
+        userId: meeting.userId,
+        reportingMonth: meeting.reportingMonth,
+        reportingWeek: meeting.reportingWeek,
+        customerName: meeting.customerName,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Meeting deleted successfully',
+    };
   }
 }

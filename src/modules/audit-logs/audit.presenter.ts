@@ -33,6 +33,14 @@ export function presentAuditLog(log: AuditLog) {
       description = `${actorName} set their password`;
       break;
 
+    case 'DELETE_OPPORTUNITY':
+      description = `${actorName} deleted a pipeline opportunity`;
+      break;
+
+    case 'DELETE_MEETING':
+      description = `${actorName} deleted a meeting`;
+      break;
+
     default:
       description = `${actorName} performed ${log.action
         .toLowerCase()
