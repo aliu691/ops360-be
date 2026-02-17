@@ -5,120 +5,91 @@ import { MeetingRow, WeeklyFinding, WeeklyStatus } from '../types/kpi-types';
    CONFIG — single source of truth
 ---------------------------------------------- */
 const KPI_CONFIG = {
-  MIN_MEETINGS: 5,
-  IDEAL_MEETINGS: 8,
+  REQUIRED_MEETINGS: 5,
+  POINTS_PER_MEETING: 20,
 
-  PENALTY_PER_MISSED_MEETING: 10,
-
-  ACTIVITY_WEIGHT: 0.6,
-  QUALITY_WEIGHT: 0.4,
+  PENALTIES: {
+    MISSING_MEETING: 20,
+    MISSING_CONTACT: 10,
+    MISSING_OUTCOME: 10,
+    ROLE_ONLY_CONTACT: 10,
+  },
 
   STATUS_THRESHOLDS: {
     GOOD: 70,
     FAIR: 45,
   },
-
-  QUALITY_PENALTIES: {
-    MISSING_OUTCOME: 10,
-    MISSING_CONTACT: 10,
-    ROLE_ONLY_CONTACT: 15, // ⬅ stronger signal
-  },
 };
 
 export class WeeklyEvaluator {
   static computeScoreAndStatus(meetings: MeetingRow[]) {
-    const total = meetings.length;
+    const MAX_MEETINGS = 5;
+    const meetingsToScore = meetings.slice(0, MAX_MEETINGS);
 
-    /* ---------------------------------------------
-       1. QUALITY ANALYSIS
-    ---------------------------------------------- */
-    let qualityScore = 100;
+    let score = 0;
 
     let missingOutcomeCount = 0;
     let missingContactCount = 0;
     let roleOnlyCount = 0;
 
-    let hasCriticalQualityIssue = false;
+    for (const m of meetingsToScore) {
+      // 10 points for meeting existence
+      score += 10;
 
-    for (const m of meetings) {
       const outcomePresent = (m.meetingOutcome ?? '').trim().length > 0;
       const contact = (m.primaryContact ?? '').trim();
 
-      if (!outcomePresent) {
+      if (outcomePresent) {
+        score += 5;
+      } else {
         missingOutcomeCount++;
-        hasCriticalQualityIssue = true;
       }
 
       if (!contact) {
         missingContactCount++;
-        hasCriticalQualityIssue = true;
       } else if (roleRegex.test(contact)) {
         roleOnlyCount++;
-        hasCriticalQualityIssue = true; // 🚫 cannot be GOOD
+      } else {
+        score += 5;
       }
     }
 
-    qualityScore -=
-      missingOutcomeCount * KPI_CONFIG.QUALITY_PENALTIES.MISSING_OUTCOME;
-    qualityScore -=
-      missingContactCount * KPI_CONFIG.QUALITY_PENALTIES.MISSING_CONTACT;
-    qualityScore -=
-      roleOnlyCount * KPI_CONFIG.QUALITY_PENALTIES.ROLE_ONLY_CONTACT;
+    score = Math.max(0, Math.min(100, score));
 
-    qualityScore = Math.max(0, Math.min(100, qualityScore));
-
-    /* ---------------------------------------------
-       2. ACTIVITY SCORE
-    ---------------------------------------------- */
-    let activityScore =
-      total >= KPI_CONFIG.IDEAL_MEETINGS
-        ? 100
-        : Math.round((total / KPI_CONFIG.IDEAL_MEETINGS) * 100);
-
-    activityScore = Math.max(0, Math.min(100, activityScore));
+    // STATUS
+    // STATUS
+    let status: WeeklyStatus;
+    if (score >= 70) status = 'GOOD';
+    else if (score >= 45) status = 'FAIR';
+    else status = 'POOR';
 
     /* ---------------------------------------------
-       3. BASE SCORE
-    ---------------------------------------------- */
-    let finalScore = Math.round(
-      activityScore * KPI_CONFIG.ACTIVITY_WEIGHT +
-        qualityScore * KPI_CONFIG.QUALITY_WEIGHT,
-    );
-
-    /* ---------------------------------------------
-       4. ACTIVITY DEFICIT PENALTY
-    ---------------------------------------------- */
-    const missedMeetings = Math.max(0, KPI_CONFIG.MIN_MEETINGS - total);
-    const activityPenalty =
-      missedMeetings * KPI_CONFIG.PENALTY_PER_MISSED_MEETING;
-
-    finalScore -= activityPenalty;
-    finalScore = Math.max(0, Math.min(100, finalScore));
-
-    /* ---------------------------------------------
-       5. WEEKLY FINDINGS (EXPLANATORY)
-    ---------------------------------------------- */
+   BUILD WEEKLY FINDINGS
+---------------------------------------------- */
     const weeklyFindings: WeeklyFinding[] = [];
+
+    const missedMeetings = Math.max(
+      0,
+      KPI_CONFIG.REQUIRED_MEETINGS - meetings.length,
+    );
 
     if (missedMeetings > 0) {
       weeklyFindings.push({
-        status: missedMeetings >= 3 ? 'POOR' : 'FAIR',
-        message: `Below minimum activity (${KPI_CONFIG.MIN_MEETINGS}). Logged ${total} meeting(s).`,
+        status: missedMeetings >= 2 ? 'POOR' : 'FAIR',
+        message: `Missing ${missedMeetings} required meeting(s). Target is ${KPI_CONFIG.REQUIRED_MEETINGS}.`,
       });
     }
 
     if (missingOutcomeCount > 0) {
       weeklyFindings.push({
-        status:
-          missingOutcomeCount / Math.max(1, total) > 0.3 ? 'POOR' : 'FAIR',
-        message: `${missingOutcomeCount} meeting(s) missing outcomes.`,
+        status: 'FAIR',
+        message: `${missingOutcomeCount} meeting(s) missing outcome.`,
       });
     }
 
     if (missingContactCount > 0) {
       weeklyFindings.push({
-        status:
-          missingContactCount / Math.max(1, total) > 0.3 ? 'POOR' : 'FAIR',
+        status: 'FAIR',
         message: `${missingContactCount} meeting(s) missing primary contact.`,
       });
     }
@@ -126,37 +97,20 @@ export class WeeklyEvaluator {
     if (roleOnlyCount > 0) {
       weeklyFindings.push({
         status: 'FAIR',
-        message: `${roleOnlyCount} meeting(s) used role-only contacts (not a person).`,
+        message: `${roleOnlyCount} meeting(s) used role/title instead of named contact.`,
       });
     }
 
-    /* ---------------------------------------------
-       6. FINAL STATUS (NO CONTRADICTIONS)
-    ---------------------------------------------- */
-    let status: WeeklyStatus;
-
-    // 🚨 Absolute failure conditions
-    if (total < 3) {
-      status = 'POOR';
-    }
-    // 🚫 Quality issues block GOOD no matter the score
-    else if (hasCriticalQualityIssue) {
-      status =
-        finalScore >= KPI_CONFIG.STATUS_THRESHOLDS.FAIR ? 'FAIR' : 'POOR';
-    }
-    // ✅ Clean data → score-based
-    else {
-      if (finalScore >= KPI_CONFIG.STATUS_THRESHOLDS.GOOD) status = 'GOOD';
-      else if (finalScore >= KPI_CONFIG.STATUS_THRESHOLDS.FAIR) status = 'FAIR';
-      else status = 'POOR';
+    if (weeklyFindings.length === 0) {
+      weeklyFindings.push({
+        status: 'GOOD',
+        message: 'All required meetings logged with complete details.',
+      });
     }
 
-    /* ---------------------------------------------
-       7. RETURN
-    ---------------------------------------------- */
     return {
-      totalMeetings: total,
-      score: finalScore,
+      totalMeetings: meetings.length,
+      score,
       status,
       weeklyFindings,
       counts: {
@@ -164,7 +118,6 @@ export class WeeklyEvaluator {
         missingContactCount,
         roleOnlyCount,
         missedMeetings,
-        activityPenalty,
       },
     };
   }
