@@ -21,9 +21,39 @@ const KPI_CONFIG = {
   },
 };
 
+/* ---------------------------------------------
+   CONTACT VALIDATION HELPERS
+---------------------------------------------- */
+
+// Strict role detection (safe — no substring traps like "it")
+
+function normalizeContact(input: string): string {
+  return input.trim().replace(/\s+/g, ' ').replace(/\r?\n/g, '');
+}
+
+function stripPrefixes(name: string): string {
+  return name.replace(/^(mr|mrs|miss|dr|engr|prof)\.? /i, '');
+}
+
+function isRoleOnlyContact(name: string): boolean {
+  const cleaned = stripPrefixes(name);
+
+  if (!cleaned) return false;
+
+  if (roleRegex.test(cleaned)) {
+    return true;
+  }
+
+  return false;
+}
+
+/* ---------------------------------------------
+   WEEKLY EVALUATOR
+---------------------------------------------- */
+
 export class WeeklyEvaluator {
   static computeScoreAndStatus(meetings: MeetingRow[]) {
-    const MAX_MEETINGS = 5;
+    const MAX_MEETINGS = KPI_CONFIG.REQUIRED_MEETINGS;
     const meetingsToScore = meetings.slice(0, MAX_MEETINGS);
 
     let score = 0;
@@ -32,12 +62,17 @@ export class WeeklyEvaluator {
     let missingContactCount = 0;
     let roleOnlyCount = 0;
 
+    /* ---------------------------------------------
+       SCORE MEETINGS
+    ---------------------------------------------- */
     for (const m of meetingsToScore) {
       // 10 points for meeting existence
       score += 10;
 
+      /* ---------------------------
+         OUTCOME CHECK
+      ---------------------------- */
       const outcomePresent = (m.meetingOutcome ?? '').trim().length > 0;
-      const contact = (m.primaryContact ?? '').trim();
 
       if (outcomePresent) {
         score += 5;
@@ -45,9 +80,15 @@ export class WeeklyEvaluator {
         missingOutcomeCount++;
       }
 
+      /* ---------------------------
+         CONTACT CHECK (SMART)
+      ---------------------------- */
+      const rawContact = m.primaryContact ?? '';
+      const contact = normalizeContact(rawContact);
+
       if (!contact) {
         missingContactCount++;
-      } else if (roleRegex.test(contact)) {
+      } else if (isRoleOnlyContact(contact)) {
         roleOnlyCount++;
       } else {
         score += 5;
@@ -56,16 +97,22 @@ export class WeeklyEvaluator {
 
     score = Math.max(0, Math.min(100, score));
 
-    // STATUS
-    // STATUS
+    /* ---------------------------------------------
+       STATUS CALCULATION
+    ---------------------------------------------- */
     let status: WeeklyStatus;
-    if (score >= 70) status = 'GOOD';
-    else if (score >= 45) status = 'FAIR';
-    else status = 'POOR';
+
+    if (score >= KPI_CONFIG.STATUS_THRESHOLDS.GOOD) {
+      status = 'GOOD';
+    } else if (score >= KPI_CONFIG.STATUS_THRESHOLDS.FAIR) {
+      status = 'FAIR';
+    } else {
+      status = 'POOR';
+    }
 
     /* ---------------------------------------------
-   BUILD WEEKLY FINDINGS
----------------------------------------------- */
+       BUILD WEEKLY FINDINGS
+    ---------------------------------------------- */
     const weeklyFindings: WeeklyFinding[] = [];
 
     const missedMeetings = Math.max(
@@ -108,6 +155,9 @@ export class WeeklyEvaluator {
       });
     }
 
+    /* ---------------------------------------------
+       RETURN RESULT
+    ---------------------------------------------- */
     return {
       totalMeetings: meetings.length,
       score,
