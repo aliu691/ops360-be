@@ -60,15 +60,16 @@ export class CalendarService {
       hasData: boolean;
     }[] = [];
 
-    let cursor = new Date(firstDay);
+    let cursor = this.getStartOfWeek(firstDay);
 
     while (cursor <= lastDay) {
-      const start = this.getStartOfWeek(cursor);
+      const start = new Date(cursor);
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
 
-      // ✅ Only include weeks whose START date is inside the selected month
-      if (start.getMonth() !== monthIndex - 1) {
+      const overlapsMonth = start <= lastDay && end >= firstDay;
+
+      if (!overlapsMonth) {
         cursor.setDate(cursor.getDate() + 7);
         continue;
       }
@@ -80,7 +81,7 @@ export class CalendarService {
         label: `Week ${week} (${this.format(start)} – ${this.format(end)})`,
         startDate: start,
         endDate: end,
-        hasData: usedWeeks.has(week), // ✅ PER-USER FIX
+        hasData: usedWeeks.has(week),
       });
 
       cursor.setDate(cursor.getDate() + 7);
