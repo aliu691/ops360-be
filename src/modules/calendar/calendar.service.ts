@@ -17,10 +17,9 @@ export class CalendarService {
     const now = new Date();
     const months: string[] = [];
 
-    // Previous, current, next month
     for (let i = -1; i <= 1; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      months.push(d.toISOString().slice(0, 7)); // YYYY-MM
+      months.push(d.toISOString().slice(0, 7));
     }
 
     return {
@@ -31,7 +30,6 @@ export class CalendarService {
 
   /* --------------------------------
      WEEKS FOR MONTH (PER USER)
-     + hasData flag
   -------------------------------- */
   async getWeeksForMonth(month: string, userId: number) {
     if (!userId) {
@@ -67,22 +65,18 @@ export class CalendarService {
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
 
-      const overlapsMonth = start <= lastDay && end >= firstDay;
+      // ✅ WEEK BELONGS TO MONTH OF ITS START DATE
+      if (start.getMonth() === monthIndex - 1) {
+        const week = this.getISOWeek(start);
 
-      if (!overlapsMonth) {
-        cursor.setDate(cursor.getDate() + 7);
-        continue;
+        weeks.push({
+          week,
+          label: `Week ${week} (${this.format(start)} – ${this.format(end)})`,
+          startDate: start,
+          endDate: end,
+          hasData: usedWeeks.has(week),
+        });
       }
-
-      const week = this.getISOWeek(start);
-
-      weeks.push({
-        week,
-        label: `Week ${week} (${this.format(start)} – ${this.format(end)})`,
-        startDate: start,
-        endDate: end,
-        hasData: usedWeeks.has(week),
-      });
 
       cursor.setDate(cursor.getDate() + 7);
     }
@@ -101,9 +95,13 @@ export class CalendarService {
     const d = new Date(
       Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
     );
+
     const dayNum = d.getUTCDay() || 7;
+
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+
     return Math.ceil(((+d - +yearStart) / 86400000 + 1) / 7);
   }
 
