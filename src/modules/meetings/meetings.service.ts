@@ -25,9 +25,7 @@ export class MeetingsService {
   async saveMeetings(meetings: Partial<Meeting>[]) {
     if (!meetings.length) return;
 
-    /* ------------------------------------------------
-       0️⃣ Hard validation (must have user context)
-    ------------------------------------------------ */
+    /* ------------------------------------------------ */
     const invalid = meetings.find(
       (m) => !m.userId || !m.reportingMonth || m.reportingWeek === undefined,
     );
@@ -40,15 +38,9 @@ export class MeetingsService {
 
     const { userId, reportingMonth, reportingWeek } = meetings[0];
 
-    /* ------------------------------------------------
-       1️⃣ Prevent duplicate uploads PER USER
-    ------------------------------------------------ */
+    /* ------------------------------------------------ */
     const existing = await this.meetingRepo.findOne({
-      where: {
-        userId,
-        reportingMonth,
-        reportingWeek,
-      },
+      where: { userId, reportingMonth, reportingWeek },
       select: ['id'],
     });
 
@@ -58,11 +50,37 @@ export class MeetingsService {
       );
     }
 
-    /* ------------------------------------------------
-       2️⃣ Persist meetings
-    ------------------------------------------------ */
-    const entities = this.meetingRepo.create(meetings);
-    await this.meetingRepo.save(entities);
+    /* ------------------------------------------------ */
+    // 1️⃣ Save base meetings first
+    const baseEntities = meetings.map((m) =>
+      this.meetingRepo.create({
+        userId: m.userId,
+        repName: m.repName,
+        customerName: m.customerName,
+        primaryContact: m.primaryContact,
+        meetingPurpose: m.meetingPurpose,
+        meetingOutcome: m.meetingOutcome,
+        reportingMonth: m.reportingMonth,
+        reportingWeek: m.reportingWeek,
+      }),
+    );
+
+    const savedMeetings = await this.meetingRepo.save(baseEntities);
+
+    /* ------------------------------------------------ */
+    // 2️⃣ Attach presales (SAFE WAY)
+    for (let i = 0; i < savedMeetings.length; i++) {
+      const meeting = savedMeetings[i];
+      const owners = meetings[i].preSalesOwners;
+
+      if (owners && owners.length > 0) {
+        await this.meetingRepo
+          .createQueryBuilder()
+          .relation(Meeting, 'preSalesOwners')
+          .of(meeting.id)
+          .add(owners.map((o) => o.id));
+      }
+    }
   }
 
   async getMeetingsForActor(
@@ -77,7 +95,8 @@ export class MeetingsService {
   ) {
     const qb = this.meetingRepo
       .createQueryBuilder('m')
-      .leftJoinAndSelect('m.user', 'user');
+      .leftJoinAndSelect('m.user', 'user')
+      .leftJoinAndSelect('m.preSalesOwners', 'preSalesOwners');
 
     /* 🔐 USER OWNERSHIP — NOW CORRECT */
     if (actor.type === 'USER') {
@@ -126,6 +145,7 @@ export class MeetingsService {
   ) {
     const qb = this.meetingRepo
       .createQueryBuilder('m')
+      .leftJoinAndSelect('m.preSalesOwners', 'preSalesOwners') // ✅ ADD THIS
       .where('m.repName = :repName', { repName });
 
     if (filters?.month) {
@@ -154,6 +174,7 @@ export class MeetingsService {
   ) {
     const qb = this.meetingRepo
       .createQueryBuilder('m')
+      .leftJoinAndSelect('m.preSalesOwners', 'preSalesOwners') // ✅ ADD THIS
       .where('m."userId" = :userId', { userId });
 
     if (filters?.month) {

@@ -13,6 +13,7 @@ import { MeetingsService } from '../meetings/meetings.service';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { User } from '../users/users.entity';
 import { AuditAction } from '../audit-logs/audit-actions';
+import { Meeting } from '../meetings/meetings.entity';
 
 @Injectable()
 export class UploadService {
@@ -28,11 +29,147 @@ export class UploadService {
     private readonly auditService: AuditService,
   ) {}
 
+  // async processMeetingsFile(
+  //   file: Express.Multer.File,
+  //   context: {
+  //     repName: string;
+  //     reportingMonth: string; // YYYY-MM
+  //     reportingWeek: number;
+  //     userId: number;
+  //     actorType: 'USER' | 'ADMIN';
+  //   },
+  // ) {
+  //   const { repName, reportingMonth, reportingWeek, userId, actorType } =
+  //     context;
+
+  //   /* ============================
+  //    VALIDATION
+  // ============================ */
+  //   if (!repName || !reportingMonth || reportingWeek === undefined) {
+  //     throw new BadRequestException(
+  //       'repName, reportingMonth and reportingWeek are required',
+  //     );
+  //   }
+
+  //   if (!file || !file.buffer) {
+  //     throw new BadRequestException('Uploaded file is missing or invalid');
+  //   }
+
+  //   /* ============================
+  //    🔒 OWNERSHIP ENFORCEMENT
+  //    USER can only upload their own data
+  // ============================ */
+  //   if (actorType === 'USER') {
+  //     const user = await this.userRepo.findOne({
+  //       where: { id: userId },
+  //       select: ['firstName'],
+  //     });
+
+  //     if (!user || user.firstName !== repName) {
+  //       throw new ForbiddenException(
+  //         'You are not allowed to upload meetings for another rep',
+  //       );
+  //     }
+  //   }
+
+  //   /* ============================
+  //    READ EXCEL (BUFFER-BASED)
+  // ============================ */
+  //   const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+  //   const sheetName = workbook.SheetNames[0];
+
+  //   if (!sheetName) {
+  //     throw new BadRequestException('Excel file contains no sheets');
+  //   }
+
+  //   const sheet = workbook.Sheets[sheetName];
+  //   const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+  //   if (rows.length < 2) {
+  //     return { totalRows: 0 };
+  //   }
+
+  //   /* ============================
+  //    HEADER MAPPING
+  // ============================ */
+  //   const headerRow = rows[0] as Record<string, any>;
+  //   const columnMap: Record<string, string> = {};
+
+  //   for (const key of Object.keys(headerRow)) {
+  //     const value = headerRow[key]?.toString().trim().toUpperCase();
+
+  //     if (value === 'CLIENT NAME') columnMap.customerName = key;
+  //     if (value === 'PRIMARY CONTACT') columnMap.primaryContact = key;
+  //     if (value === 'PURPOSE OF MEETING') columnMap.meetingPurpose = key;
+  //     if (value === 'OUTCOME') columnMap.meetingOutcome = key;
+  //   }
+
+  //   if (
+  //     !columnMap.customerName ||
+  //     !columnMap.primaryContact ||
+  //     !columnMap.meetingPurpose ||
+  //     !columnMap.meetingOutcome
+  //   ) {
+  //     throw new BadRequestException(
+  //       'Invalid file format. Required columns: CLIENT NAME, PRIMARY CONTACT, PURPOSE OF MEETING, OUTCOME',
+  //     );
+  //   }
+
+  //   /* ============================
+  //    TRANSFORM ROWS
+  // ============================ */
+  //   const meetings = rows.slice(1).map((row: any) => ({
+  //     userId,
+  //     repName,
+  //     reportingMonth,
+  //     reportingWeek,
+  //     customerName: row[columnMap.customerName] || '',
+  //     primaryContact: row[columnMap.primaryContact] || '',
+  //     meetingPurpose: row[columnMap.meetingPurpose] || '',
+  //     meetingOutcome: row[columnMap.meetingOutcome] || '',
+  //   }));
+
+  //   const filteredMeetings = meetings.filter(
+  //     (m) => m.customerName && m.customerName.trim() !== '',
+  //   );
+
+  //   if (filteredMeetings.length === 0) {
+  //     return { totalRows: 0 };
+  //   }
+
+  //   /* ============================
+  //    SAVE (BULK)
+  // ============================ */
+  //   await this.meetingsService.saveMeetings(filteredMeetings);
+
+  //   await this.auditService.log({
+  //     actorType,
+  //     actorId: userId,
+  //     action: AuditAction.UPLOAD_MEETINGS,
+  //     entity: 'MEETING',
+  //     metadata: {
+  //       repName,
+  //       reportingMonth,
+  //       reportingWeek,
+  //       rowsUploaded: filteredMeetings.length,
+  //     },
+  //   });
+
+  //   return {
+  //     totalRows: filteredMeetings.length,
+  //     reporting: {
+  //       repName,
+  //       month: reportingMonth,
+  //       week: reportingWeek,
+  //     },
+  //   };
+  // }
+
   async processMeetingsFile(
     file: Express.Multer.File,
     context: {
       repName: string;
-      reportingMonth: string; // YYYY-MM
+      reportingMonth: string;
       reportingWeek: number;
       userId: number;
       actorType: 'USER' | 'ADMIN';
@@ -41,9 +178,6 @@ export class UploadService {
     const { repName, reportingMonth, reportingWeek, userId, actorType } =
       context;
 
-    /* ============================
-     VALIDATION
-  ============================ */
     if (!repName || !reportingMonth || reportingWeek === undefined) {
       throw new BadRequestException(
         'repName, reportingMonth and reportingWeek are required',
@@ -54,10 +188,7 @@ export class UploadService {
       throw new BadRequestException('Uploaded file is missing or invalid');
     }
 
-    /* ============================
-     🔒 OWNERSHIP ENFORCEMENT
-     USER can only upload their own data
-  ============================ */
+    /* 🔒 Ownership */
     if (actorType === 'USER') {
       const user = await this.userRepo.findOne({
         where: { id: userId },
@@ -72,7 +203,7 @@ export class UploadService {
     }
 
     /* ============================
-     READ EXCEL (BUFFER-BASED)
+     READ EXCEL (TYPE FIX HERE)
   ============================ */
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -82,16 +213,19 @@ export class UploadService {
     }
 
     const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+    const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, {
+      defval: null,
+    });
 
     if (rows.length < 2) {
       return { totalRows: 0 };
     }
 
     /* ============================
-     HEADER MAPPING
+     HEADER
   ============================ */
-    const headerRow = rows[0] as Record<string, any>;
+    const headerRow = rows[0];
     const columnMap: Record<string, string> = {};
 
     for (const key of Object.keys(headerRow)) {
@@ -101,6 +235,14 @@ export class UploadService {
       if (value === 'PRIMARY CONTACT') columnMap.primaryContact = key;
       if (value === 'PURPOSE OF MEETING') columnMap.meetingPurpose = key;
       if (value === 'OUTCOME') columnMap.meetingOutcome = key;
+
+      if (
+        value === 'PRE SALES' ||
+        value === 'PRESALES' ||
+        value === 'PRE-SALES'
+      ) {
+        columnMap.preSales = key;
+      }
     }
 
     if (
@@ -115,31 +257,71 @@ export class UploadService {
     }
 
     /* ============================
-     TRANSFORM ROWS
+     ✅ TYPE SAFE ARRAY
   ============================ */
-    const meetings = rows.slice(1).map((row: any) => ({
-      userId,
-      repName,
-      reportingMonth,
-      reportingWeek,
-      customerName: row[columnMap.customerName] || '',
-      primaryContact: row[columnMap.primaryContact] || '',
-      meetingPurpose: row[columnMap.meetingPurpose] || '',
-      meetingOutcome: row[columnMap.meetingOutcome] || '',
-    }));
+    const meetings: Partial<Meeting>[] = [];
 
-    const filteredMeetings = meetings.filter(
-      (m) => m.customerName && m.customerName.trim() !== '',
-    );
+    for (const row of rows.slice(1)) {
+      const customerName = row[columnMap.customerName]?.toString().trim();
 
-    if (filteredMeetings.length === 0) {
+      if (!customerName) continue;
+
+      /* ✅ EMAIL PARSING */
+      const rawEmails: string[] =
+        columnMap.preSales && row[columnMap.preSales]
+          ? row[columnMap.preSales]
+              .toString()
+              .split(',')
+              .map((e: string) => e.trim().toLowerCase())
+              .filter(Boolean)
+          : [];
+
+      /* ✅ AUTO LINK USERS (STRICT + PRE_SALES ONLY) */
+      let preSalesOwners: User[] = [];
+
+      if (rawEmails.length > 0) {
+        preSalesOwners = await this.userRepo.find({
+          where: {
+            email: In(rawEmails),
+            department: 'PRE_SALES', // 🔥 enforce role
+          },
+        });
+
+        /* 🚨 STRICT VALIDATION */
+        if (preSalesOwners.length !== rawEmails.length) {
+          const foundEmails = preSalesOwners.map((u) => u.email);
+
+          const missingOrInvalid = rawEmails.filter(
+            (email) => !foundEmails.includes(email),
+          );
+
+          throw new BadRequestException(
+            `Invalid pre-sales users, email(s): ${missingOrInvalid.join(', ')}`,
+          );
+        }
+      }
+
+      meetings.push({
+        userId,
+        repName,
+        reportingMonth,
+        reportingWeek,
+        customerName,
+        primaryContact: row[columnMap.primaryContact] || '',
+        meetingPurpose: row[columnMap.meetingPurpose] || '',
+        meetingOutcome: row[columnMap.meetingOutcome] || '',
+        preSalesOwners,
+      });
+    }
+
+    if (!meetings.length) {
       return { totalRows: 0 };
     }
 
     /* ============================
-     SAVE (BULK)
+     SAVE
   ============================ */
-    await this.meetingsService.saveMeetings(filteredMeetings);
+    await this.meetingsService.saveMeetings(meetings);
 
     await this.auditService.log({
       actorType,
@@ -150,12 +332,12 @@ export class UploadService {
         repName,
         reportingMonth,
         reportingWeek,
-        rowsUploaded: filteredMeetings.length,
+        rowsUploaded: meetings.length,
       },
     });
 
     return {
-      totalRows: filteredMeetings.length,
+      totalRows: meetings.length,
       reporting: {
         repName,
         month: reportingMonth,

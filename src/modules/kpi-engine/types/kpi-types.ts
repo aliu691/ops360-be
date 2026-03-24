@@ -8,7 +8,14 @@ export interface MeetingRow {
   primaryContact?: string | null;
   meetingPurpose?: string | null;
   meetingOutcome?: string | null;
+  preSalesOwners?: PreSalesUser[] | null;
   createdAt?: Date | string;
+}
+
+interface PreSalesUser {
+  id: number;
+  firstName: string;
+  lastName: string;
 }
 
 export interface MeetingFinding {
