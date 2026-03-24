@@ -5,6 +5,8 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { User } from '../users/users.entity';
 
@@ -28,11 +30,25 @@ export class Meeting {
   @Column({ nullable: true })
   meetingOutcome: string;
 
+  @ManyToMany(() => User)
+  @JoinTable({
+    name: 'meeting_pre_sales',
+    joinColumn: {
+      name: 'meeting_id',
+      referencedColumnName: 'id',
+    },
+    inverseJoinColumn: {
+      name: 'pre_sales_owner_id',
+      referencedColumnName: 'id',
+    },
+  })
+  preSalesOwners: User[];
+
   @Column({ type: 'text' })
   reportingMonth: string; // YYYY-MM
 
   @Column({ type: 'int' })
-  reportingWeek: number; // ISO week number
+  reportingWeek: number;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -40,7 +56,6 @@ export class Meeting {
   /* -----------------------------
      RELATION
   ----------------------------- */
-
   @ManyToOne(() => User, {
     nullable: false,
     onDelete: 'RESTRICT',
