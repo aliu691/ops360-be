@@ -18,15 +18,13 @@ const KPI_CONFIG = {
   STATUS_THRESHOLDS: {
     GOOD: 70,
     FAIR: 45,
+    EXCELLENT: 100,
   },
 };
 
 /* ---------------------------------------------
    CONTACT VALIDATION HELPERS
 ---------------------------------------------- */
-
-// Strict role detection (safe — no substring traps like "it")
-
 function normalizeContact(input: string): string {
   return input.trim().replace(/\s+/g, ' ').replace(/\r?\n/g, '');
 }
@@ -37,20 +35,13 @@ function stripPrefixes(name: string): string {
 
 function isRoleOnlyContact(name: string): boolean {
   const cleaned = stripPrefixes(name);
-
   if (!cleaned) return false;
-
-  if (roleRegex.test(cleaned)) {
-    return true;
-  }
-
-  return false;
+  return roleRegex.test(cleaned);
 }
 
 /* ---------------------------------------------
    WEEKLY EVALUATOR
 ---------------------------------------------- */
-
 export class WeeklyEvaluator {
   static computeScoreAndStatus(meetings: MeetingRow[]) {
     const MAX_MEETINGS = KPI_CONFIG.REQUIRED_MEETINGS;
@@ -63,26 +54,18 @@ export class WeeklyEvaluator {
     let roleOnlyCount = 0;
 
     /* ---------------------------------------------
-       SCORE MEETINGS
+       SCORE BASE MEETINGS (MAX 5)
     ---------------------------------------------- */
     for (const m of meetingsToScore) {
-      // 10 points for meeting existence
       score += 10;
 
-      /* ---------------------------
-         OUTCOME CHECK
-      ---------------------------- */
       const outcomePresent = (m.meetingOutcome ?? '').trim().length > 0;
-
       if (outcomePresent) {
         score += 5;
       } else {
         missingOutcomeCount++;
       }
 
-      /* ---------------------------
-         CONTACT CHECK (SMART)
-      ---------------------------- */
       const rawContact = m.primaryContact ?? '';
       const contact = normalizeContact(rawContact);
 
@@ -95,14 +78,26 @@ export class WeeklyEvaluator {
       }
     }
 
-    score = Math.max(0, Math.min(100, score));
+    /* ---------------------------------------------
+       BONUS FOR EXTRA MEETINGS
+    ---------------------------------------------- */
+    const extraMeetings = Math.max(
+      0,
+      meetings.length - KPI_CONFIG.REQUIRED_MEETINGS,
+    );
+
+    if (extraMeetings > 0) {
+      score += extraMeetings * KPI_CONFIG.POINTS_PER_MEETING;
+    }
 
     /* ---------------------------------------------
        STATUS CALCULATION
     ---------------------------------------------- */
     let status: WeeklyStatus;
 
-    if (score >= KPI_CONFIG.STATUS_THRESHOLDS.GOOD) {
+    if (score > KPI_CONFIG.STATUS_THRESHOLDS.EXCELLENT) {
+      status = 'EXCELLENT'; // strictly above 100
+    } else if (score >= KPI_CONFIG.STATUS_THRESHOLDS.GOOD) {
       status = 'GOOD';
     } else if (score >= KPI_CONFIG.STATUS_THRESHOLDS.FAIR) {
       status = 'FAIR';
@@ -148,11 +143,21 @@ export class WeeklyEvaluator {
       });
     }
 
+    /* ---------------------------------------------
+       SUCCESS / OVERPERFORMANCE MESSAGE
+    ---------------------------------------------- */
     if (weeklyFindings.length === 0) {
-      weeklyFindings.push({
-        status: 'GOOD',
-        message: 'All required meetings logged with complete details.',
-      });
+      if (extraMeetings > 0) {
+        weeklyFindings.push({
+          status: 'EXCELLENT',
+          message: `Exceeded weekly target by ${extraMeetings} meeting(s). Outstanding performance.`,
+        });
+      } else {
+        weeklyFindings.push({
+          status: 'GOOD',
+          message: 'All required meetings logged with complete details.',
+        });
+      }
     }
 
     /* ---------------------------------------------
@@ -168,6 +173,7 @@ export class WeeklyEvaluator {
         missingContactCount,
         roleOnlyCount,
         missedMeetings,
+        extraMeetings, // ✅ NEW (frontend should rely on this)
       },
     };
   }
