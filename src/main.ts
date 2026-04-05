@@ -5,11 +5,14 @@ import { DataSource } from 'typeorm';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // ✅ Trust proxy (important for Render / reverse proxies)
   const server = app.getHttpAdapter().getInstance();
   server.set('trust proxy', true);
 
+  // ✅ Dynamic port (Render provides this)
   const port = process.env.PORT ?? 3000;
 
+  // ✅ CORS config
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(','),
     methods: 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
@@ -17,6 +20,7 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // ✅ DB warm-up (good for cold starts)
   const dataSource = app.get(DataSource);
 
   try {
@@ -32,7 +36,9 @@ async function bootstrap() {
     console.error('❌ Database connection NOT initialized');
   }
 
-  await app.listen(port);
+  // ✅ CRITICAL FIX FOR RENDER
+  await app.listen(port, '0.0.0.0');
+
   console.log(`🚀 Server running on port ${port}`);
 }
 
