@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer';
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 
 function findChromePath(): string | undefined {
   const basePath = '/opt/render/.cache/puppeteer/chrome';
