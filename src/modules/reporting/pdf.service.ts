@@ -57,14 +57,13 @@
 //   }
 // }
 
-import puppeteer from 'puppeteer';
-import { executablePath } from 'puppeteer';
+import puppeteer, { executablePath } from 'puppeteer';
 
 export class PdfService {
   async generateMeetingReportPdf(html: string): Promise<Buffer> {
     const browser = await puppeteer.launch({
       headless: true,
-      executablePath: executablePath(), // ✅ Let Puppeteer resolve its own Chrome path
+      executablePath: executablePath(),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -74,7 +73,6 @@ export class PdfService {
     });
 
     const page = await browser.newPage();
-
     await page.setContent(html, { waitUntil: 'networkidle0' });
 
     const pdf = await page.pdf({
@@ -84,7 +82,6 @@ export class PdfService {
     });
 
     await browser.close();
-
     return Buffer.from(pdf);
   }
 }
