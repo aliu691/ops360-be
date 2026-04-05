@@ -19,6 +19,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuditModule } from './modules/audit-logs/audit.module';
+import { ReportingModule } from './modules/reporting/reporting.module';
 
 @Module({
   providers: [
@@ -73,6 +74,7 @@ import { AuditModule } from './modules/audit-logs/audit.module';
     CustomersModule,
     AuthModule,
     AuditModule,
+    ReportingModule,
   ],
 })
 export class AppModule {}

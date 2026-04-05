@@ -10,5 +10,6 @@ import { Meeting } from '../meetings/meetings.entity';
   ],
   controllers: [CalendarController],
   providers: [CalendarService],
+  exports: [CalendarService],
 })
 export class CalendarModule {}

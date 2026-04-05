@@ -9,6 +9,7 @@ export interface MeetingRow {
   meetingPurpose?: string | null;
   meetingOutcome?: string | null;
   preSalesOwners?: PreSalesUser[] | null;
+
   createdAt?: Date | string;
 }
 
