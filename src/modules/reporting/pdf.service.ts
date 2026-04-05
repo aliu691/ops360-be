@@ -1,11 +1,31 @@
 import puppeteer from 'puppeteer';
+import fs from 'fs';
+import path from 'path';
+
+function findChromePath(): string | undefined {
+  const basePath = '/opt/render/.cache/puppeteer/chrome';
+
+  if (!fs.existsSync(basePath)) return undefined;
+
+  const versions = fs.readdirSync(basePath);
+
+  if (!versions.length) return undefined;
+
+  // take latest version
+  const latest = versions.sort().reverse()[0];
+
+  const chromePath = path.join(basePath, latest, 'chrome-linux64', 'chrome');
+
+  return chromePath;
+}
 
 export class PdfService {
   async generateMeetingReportPdf(html: string): Promise<Buffer> {
+    const executablePath = findChromePath();
+
     const browser = await puppeteer.launch({
       headless: true,
-
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      executablePath: executablePath || undefined,
 
       args: [
         '--no-sandbox',
