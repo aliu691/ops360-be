@@ -27,10 +27,10 @@ export function buildMonthlyReportHTML(
    PERFORMANCE COLOR HELPER
 ========================= */
   const getPerformanceColor = (rate: number) => {
-    if (rate > 100) return '#7c3aed'; // purple (overachieving)
-    if (rate >= 80) return '#059669'; // green (pass)
-    if (rate >= 50) return '#2563eb'; // blue (fair)
-    return '#dc2626'; // red (failed)
+    if (rate > 100) return '#6d28d9';
+    if (rate >= 80) return '#16a34a';
+    if (rate >= 50) return '#2563eb';
+    return '#dc2626';
   };
 
   return `
@@ -88,6 +88,7 @@ export function buildMonthlyReportHTML(
         background: #e5e7eb;
         border-radius: 10px;
         margin-top: 10px;
+        overflow: hidden; 
       }
 
       .progress-bar {
@@ -306,10 +307,8 @@ export function buildMonthlyReportHTML(
 
         <div class="progress">
           <div class="progress-bar" style="
-            width:${Math.min(report.performance.meetingAchievementRate, 100)}%;
-            background:${getPerformanceColor(
-              report.performance.meetingAchievementRate,
-            )};
+            width:${Math.min(report.performance.meetingAchievementRate, 99.5)}%;
+            background:${getPerformanceColor(report.performance.meetingAchievementRate)};
           "></div>
       </div>
 
@@ -350,12 +349,10 @@ export function buildMonthlyReportHTML(
         <p class="muted" style="margin-top:10px;">PRE-SALES SUCCESS</p>
 
         <div class="progress">
-        <div class="progress-bar" style="
-          width:${Math.min(report.performance.presalesAchievementRate, 100)}%;
-          background:${getPerformanceColor(
-            report.performance.presalesAchievementRate,
-          )};
-        "></div>
+          <div class="progress-bar" style="
+            width:${Math.min(report.performance.presalesAchievementRate, 99.5)}%;
+            background:${getPerformanceColor(report.performance.presalesAchievementRate)};
+          "></div>
       </div>
 
       <p class="muted">
