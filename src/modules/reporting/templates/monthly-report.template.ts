@@ -23,6 +23,16 @@ export function buildMonthlyReportHTML(
     return acc;
   }, {});
 
+  /* =========================
+   PERFORMANCE COLOR HELPER
+========================= */
+  const getPerformanceColor = (rate: number) => {
+    if (rate > 100) return '#6d28d9';
+    if (rate >= 80) return '#16a34a';
+    if (rate >= 50) return '#2563eb';
+    return '#dc2626';
+  };
+
   return `
   <html>
   <head>
@@ -78,6 +88,7 @@ export function buildMonthlyReportHTML(
         background: #e5e7eb;
         border-radius: 10px;
         margin-top: 10px;
+        overflow: hidden; 
       }
 
       .progress-bar {
@@ -295,13 +306,15 @@ export function buildMonthlyReportHTML(
         <p class="muted" style="margin-top:10px;">MEETING ACHIEVEMENT</p>
 
         <div class="progress">
-        <div class="progress-bar" style="
-            width:${report.performance.meetingAchievementRate}%;
-            background:#2563eb;
-        "></div>
-        </div>
+          <div class="progress-bar" style="
+            width:${Math.min(report.performance.meetingAchievementRate, 99.5)}%;
+            background:${getPerformanceColor(report.performance.meetingAchievementRate)};
+          "></div>
+      </div>
 
-        <p class="muted">${report.performance.meetingAchievementRate}%</p>
+      <p class="muted">
+        ${report.performance.meetingAchievementRate}%
+      </p>
     </div>
 
     <!-- PRE-SALES -->
@@ -336,13 +349,15 @@ export function buildMonthlyReportHTML(
         <p class="muted" style="margin-top:10px;">PRE-SALES SUCCESS</p>
 
         <div class="progress">
-        <div class="progress-bar" style="
-            width:${report.performance.presalesAchievementRate}%;
-            background:#059669;
-        "></div>
-        </div>
+          <div class="progress-bar" style="
+            width:${Math.min(report.performance.presalesAchievementRate, 99.5)}%;
+            background:${getPerformanceColor(report.performance.presalesAchievementRate)};
+          "></div>
+      </div>
 
-        <p class="muted">${report.performance.presalesAchievementRate}%</p>
+      <p class="muted">
+        ${report.performance.presalesAchievementRate}%
+      </p>
     </div>
 
     </div>
