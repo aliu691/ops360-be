@@ -219,6 +219,15 @@ export function buildMonthlyReportHTML(
 
     <p style="
       font-size:14px;
+      font-weight:600;
+      margin-top:8px;
+      color:#111827;
+    ">
+      ${repName}
+    </p>
+
+    <p style="
+      font-size:14px;
       color:#6b7280;
       margin-top:10px;
       max-width:520px;

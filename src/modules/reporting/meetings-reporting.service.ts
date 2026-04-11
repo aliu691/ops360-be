@@ -64,13 +64,15 @@ export class MeetingsReportingService {
       clientMap.set(key, (clientMap.get(key) || 0) + 1);
     }
 
-    let mostVisitedClient: string | null = null;
+    let mostVisitedClients: string[] = [];
     let mostVisits = 0;
 
     for (const [client, count] of clientMap.entries()) {
       if (count > mostVisits) {
-        mostVisitedClient = client;
         mostVisits = count;
+        mostVisitedClients = [client]; // reset with new leader
+      } else if (count === mostVisits) {
+        mostVisitedClients.push(client); // tie → add
       }
     }
 
@@ -138,7 +140,7 @@ export class MeetingsReportingService {
       },
 
       analytics: {
-        mostVisitedClient,
+        mostVisitedClients,
         mostVisits,
         uniqueClients: clientMap.size,
         clientBreakdown,
