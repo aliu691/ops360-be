@@ -23,7 +23,7 @@ export interface MonthlyReportResponse {
   };
 
   analytics: {
-    mostVisitedClient: string | null;
+    mostVisitedClients: string[];
     mostVisits: number;
     uniqueClients: number;
     clientBreakdown: {
