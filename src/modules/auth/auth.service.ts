@@ -173,7 +173,7 @@ export class AuthService {
 
     try {
       await this.emailService.sendEmail({
-        to: email,
+        to: [email],
         subject:
           intent === 'USER_INVITE'
             ? 'You’ve been invited to Ops360'
