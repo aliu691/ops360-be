@@ -73,7 +73,7 @@ export class AdminsService {
     const link = `${process.env.FRONTEND_URL}/set-password?token=${token}`;
 
     await this.emailService.sendEmail({
-      to: email,
+      to: [email],
       subject: 'You’ve been invited to Ops360',
       html: adminInviteTemplate({
         inviterEmail: inviter.email,
@@ -170,6 +170,18 @@ export class AdminsService {
     }
 
     return admin;
+  }
+
+  async findByIdOrFail(id: number): Promise<Admin> {
+    const user = await this.adminRepo.findOne({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Admin with ID ${id} not found`);
+    }
+
+    return user;
   }
 
   async findAll() {
