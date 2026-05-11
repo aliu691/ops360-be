@@ -28,14 +28,16 @@ export class Comment {
   pipelineDealId: number;
 
   /* -----------------------------
-     AUTHOR
+     AUTHOR SNAPSHOT (SOURCE OF TRUTH)
   ------------------------------*/
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'user_id' })
-  user: User;
+  @Column({ name: 'actor_type' })
+  actorType: 'ADMIN' | 'USER';
 
-  @Column({ name: 'user_id' })
-  userId: number;
+  @Column({ name: 'author_name' })
+  authorName: string;
+
+  @Column({ name: 'author_email' })
+  authorEmail: string;
 
   /* -----------------------------
      CONTENT

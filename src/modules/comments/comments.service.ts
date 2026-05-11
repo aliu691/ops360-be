@@ -90,9 +90,14 @@ export class CommentsService {
       );
     }
 
+    // ✅ Resolve actor identity (IMPORTANT)
+    const sender = await this.resolveActor(actor);
+
     const comment = this.commentRepo.create({
       pipelineDealId: opportunityId,
-      userId: actor.id,
+      actorType: actor.type,
+      authorName: sender.name,
+      authorEmail: sender.email,
       content: dto.content,
     });
 
@@ -118,9 +123,11 @@ export class CommentsService {
 
     if (!comment) throw new NotFoundException('Comment not found');
 
-    // 🔐 Permission
-    if (actor.type !== 'ADMIN' && comment.userId !== actor.id) {
-      throw new ForbiddenException();
+    const sender = await this.resolveActor(actor);
+
+    // 🔐 Permission (UPDATED)
+    if (actor.type !== 'ADMIN' && comment.authorEmail !== sender.email) {
+      throw new ForbiddenException('You can only edit your own comment');
     }
 
     if (comment.content.trim() === dto.content.trim()) {
@@ -143,7 +150,7 @@ export class CommentsService {
   async getByOpportunity(opportunityId: number) {
     return this.commentRepo.find({
       where: { pipelineDealId: opportunityId },
-      relations: ['user'],
+      //relations: ['user'],
       order: { createdAt: 'DESC' },
     });
   }
