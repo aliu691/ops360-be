@@ -13,6 +13,8 @@
     "incremental": true,
     "strictNullChecks": true,
     "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitAny": false,
     "skipLibCheck": true
   }
 }

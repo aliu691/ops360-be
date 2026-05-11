@@ -20,6 +20,7 @@ import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuditModule } from './modules/audit-logs/audit.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
+import { CommentsModule } from './modules/comments/comments.module';
 
 @Module({
   providers: [
@@ -75,6 +76,7 @@ import { ReportingModule } from './modules/reporting/reporting.module';
     AuthModule,
     AuditModule,
     ReportingModule,
+    CommentsModule,
   ],
 })
 export class AppModule {}

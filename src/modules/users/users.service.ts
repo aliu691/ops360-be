@@ -101,6 +101,18 @@ export class UsersService {
     });
   }
 
+  async findByIdOrFail(id: number): Promise<User> {
+    const user = await this.userRepo.findOne({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    return user;
+  }
+
   async findByName(firstName: string) {
     return this.userRepo.findOne({ where: { firstName } });
   }
